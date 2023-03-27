@@ -4,6 +4,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 import json
 import re
+import sys
 
 # def get_app_title_and_genre(package_name: str):
 #     from google_play_scraper import app
@@ -171,8 +172,7 @@ if __name__ == "__main__":
     filename = download_view_hierarchy()
     (view, stripped_view) = get_view_hierarchy(filename)
 
-    # question = 'How to search for video titled "Framework Laptop"?'
-    question = "Calculate the sum of two and three"
+    question = sys.argv[1]
     response = ask_gpt(stripped_view, question)
     print(response)
 
