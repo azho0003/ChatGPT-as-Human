@@ -5,62 +5,16 @@ import xml.etree.ElementTree as ET
 import json
 import re
 import sys
-
-# def get_app_title_and_genre(package_name: str):
-#     from google_play_scraper import app
-
-#     app_title = "This app name is <name>."
-#     app_genre = "\nThis app is categorise as a(an) <genre> app."
-
-#     result = app(package_name, lang="en", country="us")
-#     if result["title"] != "":
-#         app_title = app_title.replace("<name>", result["title"])
-#     else:
-#         app_title = ""
-#     if result["genre"] != "":
-#         app_genre = app_genre.replace("<genre>", result["genre"])
-#     else:
-#         app_genre = ""
-#     return app_title + app_genre
+import time
+from textwrap import dedent
+from pygments import highlight, lexers, formatters
+from colorama import Fore, Back, Style
 
 
-# def getAllComponents(jsondata: dict):
-#     root = jsondata["hierarchy"]
-#     queue = [root]
-#     res = []
-#     final_res = []
-#     while queue:
-#         currentNode = queue.pop(0)
-
-#         if "node" in currentNode:
-#             if type(currentNode["node"]).__name__ == "dict":
-#                 queue.append(currentNode["node"])
-#             else:
-#                 for e in currentNode["node"]:
-#                     queue.append(e)
-#         else:
-#             if ("com.android.systemui" not in currentNode["@resource-id"]) and (
-#                 "com.android.systemui" not in currentNode["@package"]
-#             ):
-#                 res.append(currentNode)
-#     for component in res:
-#         if component["@text"] == "" and component["@resource-id"] == "" and component["@content-desc"] == "":
-#             res.remove(component)
-#         else:
-#             tem_component = component
-#             del tem_component["@checkable"]
-#             del tem_component["@checked"]
-#             del tem_component["@clickable"]
-#             del tem_component["@enabled"]
-#             del tem_component["@focusable"]
-#             del tem_component["@focused"]
-#             del tem_component["@scrollable"]
-#             del tem_component["@long-clickable"]
-#             del tem_component["@password"]
-#             del tem_component["@selected"]
-#             final_res.append(component)
-
-#     return final_res
+def print_json(json_obj):
+    formatted_json = json.dumps(json_obj, indent=4)
+    colorful_json = highlight(formatted_json, lexers.JsonLexer(), formatters.TerminalFormatter())
+    print(Style.RESET_ALL + colorful_json)
 
 
 def setup():
@@ -95,11 +49,10 @@ def get_view_hierarchy(filename):
 
     for elem in root.iter():
         resource_id = elem.attrib.get("resource-id")
-        content_desc = elem.attrib.get("content-desc")
-        if not resource_id and not content_desc:
+        if not resource_id:
             elem.attrib.clear()
 
-        if "Layout" in elem.attrib.get("class", ""):
+        if "Layout" in elem.attrib.get("class", "") or elem.attrib.get("clickable") != "true":
             elem.attrib.clear()
 
         for attrib in remove_attribs:
@@ -111,49 +64,52 @@ def get_view_hierarchy(filename):
     return (full, stripped)
 
 
-def ask_gpt(view, question):
-    role = """I want you to act as a UI tester. I will provide the view hierarchy for an android app in
-    XML format and you will respond with a list of actions to perform. For example if asked how to calculate
-    the sum of 3 and 4, you would provide
+def ask_gpt(view, history):
+    role = """
+    You are an android application UI tester. Given the view hierarchy in XML format and you will
+    respond with a single action to perform. The supported actions are "click" and "send_keys". For example
     ```
-    [
-        {"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_03"},
-        {"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_add"},
-        {"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_04"},
-        {"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_equal"}
-    ]
+    {"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_03"},
     ```
-    Only respond with the actions, do not provide any explanation. Do not format the response.
+    Only respond with the action, do not provide any explanation. Do not repeat any actions.
     """
 
     prompt = f"""
-    The view hierarchy for the app being tested is
+    The view hierarchy is currently:
     ```
     {view}
     ```
     """
 
+    messages = [
+        {"role": "system", "content": dedent(role)},
+        {"role": "user", "content": "What actions have you performed so far?"},
+        {"role": "assistant", "content": json.dumps(history)},
+        {"role": "user", "content": dedent(prompt)},
+    ]
+    print(Fore.GREEN + "Messages")
+    print_json(messages)
+
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": role},
-            {"role": "assistant", "content": prompt},
-            {"role": "user", "content": question},
-        ],
+        messages=messages,
     )
 
     return response
 
 
-def perform_actions(response, view):
+def get_action(response):
     content = response["choices"][0]["message"]["content"]
-    actions = json.loads(content)
+    content = content.replace("`", "")
+    return json.loads(content)
 
-    # Process response actions
-    for action in actions:
-        match action["action"]:
-            case "click":
-                click_element(action["resource-id"], view)
+
+def perform_actions(action, view):
+    # Process response action
+    # TODO: Implement send_keys
+    match action["action"]:
+        case "click":
+            click_element(action["resource-id"], view)
 
 
 def click_element(resource, view):
@@ -169,11 +125,21 @@ def click_element(resource, view):
 if __name__ == "__main__":
     setup()
 
-    filename = download_view_hierarchy()
-    (view, stripped_view) = get_view_hierarchy(filename)
+    history = []
+    for i in range(3):
+        filename = download_view_hierarchy()
+        (view, stripped_view) = get_view_hierarchy(filename)
 
-    question = sys.argv[1]
-    response = ask_gpt(stripped_view, question)
-    print(response)
+        response = ask_gpt(stripped_view, history)
+        action = get_action(response)
+        history.append(action)
 
-    perform_actions(response, view)
+        print(Fore.GREEN + "Action:")
+        print_json(action)
+        try:
+            perform_actions(action, view)
+        except:
+            # TODO: Ask ChatGPT to try again
+            print("Failed to execute actions")
+            break
+        time.sleep(1)
