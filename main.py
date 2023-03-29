@@ -131,7 +131,12 @@ if __name__ == "__main__":
         (view, stripped_view) = get_view_hierarchy(filename)
 
         response = ask_gpt(stripped_view, history)
-        action = get_action(response)
+        try:
+            action = get_action(response)
+        except:
+            # TODO: Ask ChatGPT to try again. Most likely malformed JSON.
+            print("Failed to parse actions")
+            break
         history.append(action)
 
         print(Fore.GREEN + "Action:")
@@ -139,7 +144,7 @@ if __name__ == "__main__":
         try:
             perform_actions(action, view)
         except:
-            # TODO: Ask ChatGPT to try again
+            # TODO: Ask ChatGPT to try again. Most likely an invalid resource id.
             print("Failed to execute actions")
             break
         time.sleep(1)
