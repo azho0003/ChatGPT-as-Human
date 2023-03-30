@@ -27,7 +27,7 @@ def print_json(json_obj):
 
 
 def setup():
-    config = dotenv.dotenv_values(".env.example")
+    config = dotenv.dotenv_values(".env")
     print(config["OPENAI_API_KEY"])
     openai.api_key = config["OPENAI_API_KEY"]
 
