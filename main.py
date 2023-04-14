@@ -4,15 +4,20 @@ import subprocess
 import xml.etree.ElementTree as ET
 import json
 import re
-import sys
 import time
 from textwrap import dedent
 from pygments import highlight, lexers, formatters
 from colorama import Fore, Back, Style
 import os
+import shutil
+from collections import Counter
+
+
+# TODO : Change the role name with whatever you want
+role_name ="children"
 
 def input_text(text):
-    text = text.replace(" ","%s")
+    text = text.replace(" ", "%s")
     os.system(f"""adb shell input text \"{text}\"""")
     time.sleep(2)
     os.system(f"""adb shell input keyevent 66""")
@@ -32,15 +37,14 @@ def setup():
     openai.api_key = config["OPENAI_API_KEY"]
 
 
-
 def download_view_hierarchy():
     # sleep for 2 secs in case the page is not fully loaded
     time.sleep(2)
     if os.path.exists("window_dump.xml"):
         os.remove("window_dump.xml")
     filename = "window_dump.xml"
-    subprocess.run(["adb shell uiautomator dump"],shell=True)
-    subprocess.run([f"adb pull /sdcard/window_dump.xml {filename}"],shell=True)
+    subprocess.run(["adb shell uiautomator dump"], shell=True)
+    subprocess.run([f"adb pull /sdcard/window_dump.xml {filename}"], shell=True)
     return filename
 
 
@@ -63,6 +67,9 @@ def get_view_hierarchy(filename):
     ]
 
     for elem in root.iter():
+        # Remove namespace information
+        elem.tag = elem.tag.split('}')[-1]
+
         resource_id = elem.attrib.get("resource-id")
 
         if not resource_id:
@@ -74,44 +81,50 @@ def get_view_hierarchy(filename):
         for attrib in remove_attribs:
             elem.attrib.pop(attrib, None)
 
-    stripped = ET.tostring(root).decode("utf-8")
+    stripped = ET.tostring(root, encoding='utf-8', method='xml').decode('utf-8').replace('\n', '').replace('\r', '')
     full = ET.parse(filename)
 
-    return (full, stripped)
+    return full, stripped
 
 
-def ask_gpt(view,history,mode):
+def is_valid_action(content):
+    try:
+        action = json.loads(content.replace("`", ""))
+        if "action" in action and action["action"] in {"click", "send_keys"}:
+            if action["action"] == "click" and "resource-id" in action:
+                return True
+            elif action["action"] == "send_keys" and "text" in action:
+                return True
+    except json.JSONDecodeError:
+        pass
 
-    match mode:
-        case "tryAgain" :
-            if len(history) > 1 :
-                role = f"""
-                            Your last response {history[:-1]} is not working, give me another one.
-                            """ + """The supported actions are "click","send_keys". For example
-                              
-                              {"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_03"},
-                              
-                              Only respond with the action, do not provide any explanation. Do not repeat any actions in the provided history."""
-        case _:
-            role = """
-                  You are a children using this app. Given the view hierarchy in XML format and you will
-                  respond with a single action to perform. Do Not click any advertisements or promoted content.Do not play any videos.
-                  Do not click any external links.Do not click any video inputs.
-                  The supported actions are "click","send_keys". For example
-                  ```
-                  {"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_03"},
-                  ```
-                  Only respond with the action, do not provide any explanation. Do not repeat any actions in the provided history.
-                  """
+    return False
 
+
+def ask_gpt(view, history):
+
+    role = f"""
+                      You are a {role_name} using this app. Given the view hierarchy in XML format and you will
+                      respond with a single action to perform."""+"""
+                      The supported actions are "click","send_keys". For example
+                      ```
+                      {"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_03"},
+                      ```
+                      Only respond with the action, do not provide any explanation. Do not repeat any actions in the provided history.
+                      """
+
+    history_str = json.dumps(history, indent=4)
 
     prompt = f"""
                The view hierarchy is currently:
                ```
                {view}
                ```
+               Do not perform any action from the following history:
+               ```
+               {history_str}
+               ```
                """
-
 
     messages = [
         {"role": "system", "content": dedent(role)},
@@ -122,12 +135,21 @@ def ask_gpt(view,history,mode):
     print(Fore.GREEN + "Messages")
     print_json(messages)
 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-    )
+    while True:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            top_p=0.8
+        )
 
-    return response
+        content = response["choices"][0]["message"]["content"]
+        if is_valid_action(content):
+            print(response)
+            return response
+        else:
+            # Add a message to the conversation indicating the format was wrong
+            messages.append({"role": "user",
+                             "content": "The response format was incorrect. Please provide a valid action in the specified JSON format."})
 
 
 def get_action(response):
@@ -137,15 +159,19 @@ def get_action(response):
 
 
 def perform_actions(action, view):
-    # Process response action
-    # TODO: Implement send_keys
+    success = False
+
     match action["action"]:
         case "click":
-            click_element(action["resource-id"], view)
+            success = click_element(action["resource-id"], view)
         case "send_keys":
             input_text(action["text"])
+            success = True
         case "back":
             get_back()
+            success = True
+
+    return success
 
 
 def get_back():
@@ -157,56 +183,98 @@ def get_back():
 def click_element(resource, view):
     root = view.getroot()
     elem = root.find(f'.//node[@resource-id="{resource}"]')
+
+    if elem is None:
+        print(f"Element with resource-id '{resource}' not found.")
+        return False
+
     bounds = elem.attrib.get("bounds")
     matches = re.findall("\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)[0]
     x = (int(matches[0]) + int(matches[2])) / 2
     y = (int(matches[1]) + int(matches[3])) / 2
-    subprocess.run([f"adb shell input tap {x} {y}"],shell=True)
+    subprocess.run([f"adb shell input tap {x} {y}"], shell=True)
+    return True
+
+
+def create_folder(folder_name):
+    if os.path.exists(folder_name):
+        shutil.rmtree(folder_name)
+    os.makedirs(folder_name)
+    return folder_name
+
+
+def capture_screenshot(filename):
+    subprocess.run([f"adb shell screencap -p /sdcard/screenshot.png"], shell=True)
+    subprocess.run([f"adb pull /sdcard/screenshot.png {filename}"], shell=True)
+    subprocess.run([f"adb shell rm /sdcard/screenshot.png"], shell=True)
+
+
+def get_current_app_info():
+    result = os.popen("adb shell dumpsys window displays | grep -E 'mCurrentFocus|mFocusedApp'").read()
+    match = re.search(r'(\S+)/(\S+)}', result)
+
+    if match:
+        package_name = match.group(1)
+        activity_name = match.group(2)
+        print(package_name, activity_name)
+        return package_name, activity_name
+    else:
+        raise ValueError("Unable to find package and activity names. Make sure the app is running and in focus.")
+
+
+def go_to_app_home_screen(package_name, activity_name):
+    os.system(f"adb shell am force-stop {package_name}")
+    os.system(f"adb shell am start -n {package_name}/{activity_name}")
+    time.sleep(2)
+
 
 if __name__ == "__main__":
     setup()
-    flag = True
+    app_package_name, app_activity_name = get_current_app_info()
 
-    history = []
-    tryAgainView = 0;
-    tryAgainAction = 0;
-    while flag:
-        filename = download_view_hierarchy()
-        (view, stripped_view) = get_view_hierarchy(filename)
+    # TODO : Change this rounds number with whatever you want
+    rounds = 3
 
-        response = ask_gpt(stripped_view, history,"normal")
-        try:
-            action = get_action(response)
+    page_counter = Counter()
 
-            if action in history:
-                response = ask_gpt(stripped_view, history, "tryAgain")
-                action = get_action(response)
+    for round_num in range(1, rounds + 1):
+        folder_name = f"{role_name}_{round_num}"
+        create_folder(folder_name)
 
-            print(action)
-        except:
-            # TODO: Ask ChatGPT to try again. Most likely malformed JSON.
-            # When there is an error, go back and ask chatGPT to try again
-                get_back()
-                filename = download_view_hierarchy()
-                (view, stripped_view) = get_view_hierarchy(filename)
-                response = ask_gpt(stripped_view, history, "tryAgain")
-                action = get_action(response)
-                print(action)
+        timer = 0
+        history = []
 
-        history.append(action)
-
-        print(Fore.GREEN + "Action:")
-        print_json(action)
-        try:
-            perform_actions(action, view)
-
-        except:
-            # TODO: Ask ChatGPT to try again. Most likely an invalid resource id.
-            get_back()
+        # TODO : Change this timer number with whatever you want
+        while timer < 5:
             filename = download_view_hierarchy()
             (view, stripped_view) = get_view_hierarchy(filename)
-            response = ask_gpt(stripped_view, history, "tryAgain")
+            response = ask_gpt(stripped_view, history)
             action = get_action(response)
-            print(action)
 
-        time.sleep(2)
+            if action["action"] == "click":
+                page_counter[action["resource-id"]] += 1
+
+            # Perform the action and check if it was successful
+            click_successful = perform_actions(action, view)
+
+            # stop for 2s for screenshot
+            time.sleep(2)
+
+            # If the click is unsuccessful, go back and ask GPT for another action
+            if not click_successful:
+                get_back()
+                continue
+
+            screenshot_filename = f"{folder_name}/action_{action['action']}_{len(history)}.png"
+            capture_screenshot(screenshot_filename)
+
+            history.append(action)
+            timer += 1
+            time.sleep(2)
+
+        go_to_app_home_screen(app_package_name, app_activity_name)
+
+    # Print the top 5 resource-id the script will click
+    print("\nTop 5 app pages the script wants to go to:")
+    for resource_id, count in page_counter.most_common(5):
+        print(f"{resource_id}: {count} times")
