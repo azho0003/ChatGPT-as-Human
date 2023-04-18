@@ -220,7 +220,7 @@ def capture_screenshot(filename):
 
 
 def get_current_app_info():
-    result = os.popen("adb shell dumpsys window displays").read()
+    result = os.popen("adb shell dumpsys window windows").read()
     match = re.search(r"mCurrentFocus=.*?{.*?(\S+)\/(\S+)}", result)
 
     if match:
