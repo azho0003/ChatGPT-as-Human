@@ -12,6 +12,11 @@ import os
 import shutil
 from collections import Counter
 
+def set_working_directory():
+    abspath = os.path.abspath(__file__)
+    dname = os.path.dirname(abspath)
+    os.chdir(dname)
+
 
 # TODO : Change the role name with whatever you want
 role_name ="children"
@@ -32,6 +37,7 @@ def print_json(json_obj):
 
 
 def setup():
+    set_working_directory()
     config = dotenv.dotenv_values(".env")
     print(config["OPENAI_API_KEY"])
     openai.api_key = config["OPENAI_API_KEY"]
@@ -43,8 +49,8 @@ def download_view_hierarchy():
     if os.path.exists("window_dump.xml"):
         os.remove("window_dump.xml")
     filename = "window_dump.xml"
-    subprocess.run(["adb shell uiautomator dump"], shell=True)
-    subprocess.run([f"adb pull /sdcard/window_dump.xml {filename}"], shell=True)
+    subprocess.run("adb shell uiautomator dump", shell=True)
+    subprocess.run(f"adb pull /sdcard/window_dump.xml {filename}", shell=True)
     return filename
 
 
@@ -132,10 +138,10 @@ def ask_gpt(view, history):
         {"role": "assistant", "content": json.dumps(history)},
         {"role": "user", "content": dedent(prompt)},
     ]
-    print(Fore.GREEN + "Messages")
-    print_json(messages)
 
     while True:
+        print(Fore.GREEN + "Messages")
+        print_json(messages)
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=messages,
@@ -150,6 +156,8 @@ def ask_gpt(view, history):
             # Add a message to the conversation indicating the format was wrong
             messages.append({"role": "user",
                              "content": "The response format was incorrect. Please provide a valid action in the specified JSON format."})
+
+            time.sleep(1) # Avoid rate limiting
 
 
 def get_action(response):
@@ -192,7 +200,7 @@ def click_element(resource, view):
     matches = re.findall("\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)[0]
     x = (int(matches[0]) + int(matches[2])) / 2
     y = (int(matches[1]) + int(matches[3])) / 2
-    subprocess.run([f"adb shell input tap {x} {y}"], shell=True)
+    subprocess.run(f"adb shell input tap {x} {y}", shell=True)
     return True
 
 
@@ -204,14 +212,14 @@ def create_folder(folder_name):
 
 
 def capture_screenshot(filename):
-    subprocess.run([f"adb shell screencap -p /sdcard/screenshot.png"], shell=True)
-    subprocess.run([f"adb pull /sdcard/screenshot.png {filename}"], shell=True)
-    subprocess.run([f"adb shell rm /sdcard/screenshot.png"], shell=True)
+    subprocess.run(f"adb shell screencap -p /sdcard/screenshot.png", shell=True)
+    subprocess.run(f"adb pull /sdcard/screenshot.png {filename}", shell=True)
+    subprocess.run(f"adb shell rm /sdcard/screenshot.png", shell=True)
 
 
 def get_current_app_info():
-    result = os.popen("adb shell dumpsys window displays | grep -E 'mCurrentFocus|mFocusedApp'").read()
-    match = re.search(r'(\S+)/(\S+)}', result)
+    result = os.popen("adb shell dumpsys window displays").read()
+    match = re.search(r'mCurrentFocus=.*?{.*?(\S+)\/(\S+)}', result)
 
     if match:
         package_name = match.group(1)
