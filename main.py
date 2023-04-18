@@ -20,7 +20,7 @@ def set_working_directory():
 
 
 # TODO : Change the role name with whatever you want
-role_name = "blind person"
+role_name = "child"
 
 
 def input_text(text):
