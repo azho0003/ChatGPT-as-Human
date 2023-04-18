@@ -12,6 +12,7 @@ import os
 import shutil
 from collections import Counter
 
+
 def set_working_directory():
     abspath = os.path.abspath(__file__)
     dname = os.path.dirname(abspath)
@@ -19,7 +20,8 @@ def set_working_directory():
 
 
 # TODO : Change the role name with whatever you want
-role_name ="children"
+role_name = "children"
+
 
 def input_text(text):
     text = text.replace(" ", "%s")
@@ -74,7 +76,7 @@ def get_view_hierarchy(filename):
 
     for elem in root.iter():
         # Remove namespace information
-        elem.tag = elem.tag.split('}')[-1]
+        elem.tag = elem.tag.split("}")[-1]
 
         resource_id = elem.attrib.get("resource-id")
 
@@ -87,7 +89,7 @@ def get_view_hierarchy(filename):
         for attrib in remove_attribs:
             elem.attrib.pop(attrib, None)
 
-    stripped = ET.tostring(root, encoding='utf-8', method='xml').decode('utf-8').replace('\n', '').replace('\r', '')
+    stripped = ET.tostring(root, encoding="utf-8", method="xml").decode("utf-8").replace("\n", "").replace("\r", "")
     full = ET.parse(filename)
 
     return full, stripped
@@ -110,14 +112,14 @@ def is_valid_action(content):
 def ask_gpt(view, history):
 
     role = f"""
-                      You are a {role_name} using this app. Given the view hierarchy in XML format and you will
-                      respond with a single action to perform."""+"""
-                      The supported actions are "click","send_keys". For example
-                      ```
-                      {"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_03"},
-                      ```
-                      Only respond with the action, do not provide any explanation. Do not repeat any actions in the provided history.
-                      """
+            You are a {role_name} using this app. Given the view hierarchy in XML format and you will
+            respond with a single action to perform.
+            The supported actions are "click","send_keys". For example
+            ```
+            {"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_03"},
+            ```
+            Only respond with the action, do not provide any explanation. Do not repeat any actions in the provided history.
+            """
 
     history_str = json.dumps(history, indent=4)
 
@@ -142,11 +144,7 @@ def ask_gpt(view, history):
     while True:
         print(Fore.GREEN + "Messages")
         print_json(messages)
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            top_p=0.8
-        )
+        response = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=messages, top_p=0.8)
 
         content = response["choices"][0]["message"]["content"]
         if is_valid_action(content):
@@ -154,10 +152,14 @@ def ask_gpt(view, history):
             return response
         else:
             # Add a message to the conversation indicating the format was wrong
-            messages.append({"role": "user",
-                             "content": "The response format was incorrect. Please provide a valid action in the specified JSON format."})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": "The response format was incorrect. Please provide a valid action in the specified JSON format.",
+                }
+            )
 
-            time.sleep(1) # Avoid rate limiting
+            time.sleep(1)  # Avoid rate limiting
 
 
 def get_action(response):
@@ -219,7 +221,7 @@ def capture_screenshot(filename):
 
 def get_current_app_info():
     result = os.popen("adb shell dumpsys window displays").read()
-    match = re.search(r'mCurrentFocus=.*?{.*?(\S+)\/(\S+)}', result)
+    match = re.search(r"mCurrentFocus=.*?{.*?(\S+)\/(\S+)}", result)
 
     if match:
         package_name = match.group(1)
