@@ -20,7 +20,7 @@ def set_working_directory():
 
 
 # TODO : Change the role name with whatever you want
-role_name = "children"
+role_name = "blind person"
 
 
 def input_text(text):
@@ -116,7 +116,7 @@ def ask_gpt(view, history):
             respond with a single action to perform.
             The supported actions are "click","send_keys". For example
             ```
-            {"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_03"},
+            {{"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_03"}},
             ```
             Only respond with the action, do not provide any explanation. Do not repeat any actions in the provided history.
             """
@@ -248,7 +248,7 @@ if __name__ == "__main__":
     page_counter = Counter()
 
     for round_num in range(1, rounds + 1):
-        folder_name = f"{role_name}_{round_num}"
+        folder_name = f"{role_name.replace(' ', '_')}_{round_num}"
         create_folder(folder_name)
 
         timer = 0
