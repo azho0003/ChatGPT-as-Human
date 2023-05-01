@@ -219,8 +219,8 @@ def capture_screenshot(filename):
     subprocess.run(f"adb shell rm /sdcard/screenshot.png", shell=True)
 
 
-def get_current_app_info():
-    result = os.popen("adb shell dumpsys window windows").read()
+def process_app_info(command):
+    result = os.popen(command).read()
     match = re.search(r"mCurrentFocus=.*?{.*?(\S+)\/(\S+)}", result)
 
     if match:
@@ -230,6 +230,13 @@ def get_current_app_info():
         return package_name, activity_name
     else:
         raise ValueError("Unable to find package and activity names. Make sure the app is running and in focus.")
+
+
+def get_current_app_info():
+    try:
+        return process_app_info("adb shell dumpsys window displays")
+    except ValueError:
+        return process_app_info("adb shell dumpsys window windows")
 
 
 def go_to_app_home_screen(package_name, activity_name):
