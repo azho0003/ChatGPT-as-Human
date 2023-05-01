@@ -41,7 +41,6 @@ def print_json(json_obj):
 def setup():
     set_working_directory()
     config = dotenv.dotenv_values(".env")
-    print(config["OPENAI_API_KEY"])
     openai.api_key = config["OPENAI_API_KEY"]
 
 
@@ -148,7 +147,8 @@ def ask_gpt(view, history):
 
         content = response["choices"][0]["message"]["content"]
         if is_valid_action(content):
-            print(response)
+            print(Fore.GREEN + "Response")
+            print_json(response)
             return response
         else:
             # Add a message to the conversation indicating the format was wrong
