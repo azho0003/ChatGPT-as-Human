@@ -4,5 +4,5 @@ Instructions
 Open Android emulator, then run
 
 ```
-python main.py
+python src/main.py
 ```
