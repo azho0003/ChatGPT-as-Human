@@ -11,6 +11,7 @@ from colorama import Fore, Back, Style
 import os
 import shutil
 from collections import Counter
+from pick import pick
 
 OUTPUT_FOLDER = "output"
 TEMP_FOLDER = "temp"
@@ -23,8 +24,16 @@ def set_working_directory():
     os.chdir(root)
 
 
-# TODO : Change the role name with whatever you want
-role_name = "child"
+def select_persona():
+    with open("src/personas.json") as f:
+        personas = json.load(f)
+
+    options = list(personas.keys())
+    persona_name, index = pick(options, "Select persona")
+    persona_prompt = personas[persona_name]
+    print("Selected persona:", persona_name)
+
+    return persona_name, persona_prompt
 
 
 def input_text(text):
@@ -118,34 +127,28 @@ def is_valid_action(content):
     return False
 
 
-def ask_gpt(view, history):
+def ask_gpt(persona_prompt, view, history):
 
     role = f"""\
-            You are a {role_name} using this app. Given the view hierarchy in XML format and you will \
-            respond with a single action to perform. \
-            The supported actions are "click","send_keys". For example
-            ```
-            {{"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_03"}},
-            ```
-            Only respond with the action, do not provide any explanation. Do not repeat any actions in the provided history.\
-            """
-
-    history_str = json.dumps(history, indent=4)
+        {persona_prompt}
+        I want you to test an android application based on its view hierarchy. I will provide the view hierarchy in XML format and you will respond with a single action to perform. Only respond with the action and do not provide any explanation. The response must be valid JSON. The supported actions are as follows
+        {{"action": "click", "resource-id": "..."}}
+        {{"action": "send_keys", keys: "..."}}
+        {{"action": "back"}}
+        {{"action": "scroll", "resource-id", "direction": "...", "amount": …}}
+        {{"action": "hold", "resource-id": "..."}}
+        """
 
     prompt = f"""\
-               The view hierarchy is currently:
-               ```
-               {view}
-               ```
-               Do not perform any action from the following history:
-               ```
-               {history_str}
-               ```\
-               """
+        Give me the next action to perform, where the view hierarchy for the application being tested is
+        ```
+        {view}
+        ```
+        """
 
     messages = [
         {"role": "system", "content": dedent(role)},
-        {"role": "user", "content": "What actions have you performed so far?"},
+        {"role": "user", "content": "What actions have you performed previously within this application?"},
         {"role": "assistant", "content": json.dumps(history)},
         {"role": "user", "content": dedent(prompt)},
     ]
@@ -257,6 +260,7 @@ def go_to_app_home_screen(package_name, activity_name):
 
 if __name__ == "__main__":
     setup()
+    persona_name, persona_prompt = select_persona()
     app_package_name, app_activity_name = get_current_app_info()
 
     # TODO : Change this rounds number with whatever you want
@@ -265,7 +269,7 @@ if __name__ == "__main__":
     page_counter = Counter()
 
     for round_num in range(1, rounds + 1):
-        folder_name = os.path.join(OUTPUT_FOLDER, f"{role_name.replace(' ', '_')}_{round_num}")
+        folder_name = os.path.join(OUTPUT_FOLDER, f"{persona_name.replace(' ', '_')}_{round_num}")
         create_folder(folder_name)
 
         timer = 0
@@ -275,7 +279,7 @@ if __name__ == "__main__":
         while timer < 5:
             filename = download_view_hierarchy()
             (view, stripped_view) = get_view_hierarchy(filename)
-            response = ask_gpt(stripped_view, history)
+            response = ask_gpt(persona_prompt, stripped_view, history)
             action = get_action(response)
 
             if action["action"] == "click":
