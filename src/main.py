@@ -130,7 +130,11 @@ def is_valid_action(content):
 def get_chat_completion(**kwargs):
     while True:
         try:
-            return openai.ChatCompletion.create(**kwargs)
+            time_start = time.time()
+            reply = openai.ChatCompletion.create(**kwargs)
+            time_end = time.time()
+            time_taken = time_end-time_start
+            return [reply,time_taken]
         except openai.error.RateLimitError:
             # Waiting 1 minute as that is how long it takes the rate limit to reset
             print("Rate limit reached, waiting 1 minute")
@@ -165,12 +169,15 @@ def ask_gpt(persona_prompt, view, history):
     while True:
         print(Fore.GREEN + "Messages")
         print_json(messages)
-        response = get_chat_completion(model="gpt-3.5-turbo", messages=messages, top_p=0.8)
+        response_arr = get_chat_completion(model="gpt-3.5-turbo", messages=messages, top_p=0.8)
+        response = response_arr[0]
+        time_taken = response_arr[1]
 
         content = response["choices"][0]["message"]["content"]
         if is_valid_action(content):
             print(Fore.GREEN + "Response")
             print_json(response)
+            print("Time Taken for Response = " + str(time_taken))
             return response
         else:
             # Add a message to the conversation indicating the format was wrong
