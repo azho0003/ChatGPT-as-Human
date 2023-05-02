@@ -58,6 +58,10 @@ def setup():
 
 
 def download_view_hierarchy():
+    """
+       Downloading the view hierarchy file of the app in an XML format.
+       :return:
+    """
     if not os.path.exists(TEMP_FOLDER):
         os.mkdir(TEMP_FOLDER)
 
@@ -75,6 +79,14 @@ def download_view_hierarchy():
 
 
 def get_view_hierarchy(filename):
+    """
+        This function takes in a view hierarchy XML file and removes all the unecessary attributes from it. It returns 2
+        items, full which is the XML files without the stripped attributes and the stripped which is the XML file
+        with the stripped attributes
+
+        :param filename: View hierarchy file in XML format
+        :return: full, stripped
+    """
     tree = ET.parse(filename)
     root = tree.getroot()
 
@@ -114,6 +126,7 @@ def get_view_hierarchy(filename):
 
 
 def is_valid_action(content):
+    # the resource-id is the id of the button the action is performing on
     try:
         action = json.loads(content.replace("`", ""))
         if "action" in action and action["action"] in {"click", "send_keys"}:
@@ -260,6 +273,13 @@ def process_app_info(command):
 
 
 def get_current_app_info():
+    """
+        This function is used to get the current app information such as the package name and the activity name. The
+        package name is the unique identifier of the app and the activity name is the identifier for the current screen of
+        the app.
+
+        :return: package_name, activity_name
+        """
     try:
         return process_app_info("adb shell dumpsys window displays")
     except ValueError:
