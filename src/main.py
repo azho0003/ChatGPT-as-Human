@@ -127,8 +127,17 @@ def is_valid_action(content):
     return False
 
 
-def ask_gpt(persona_prompt, view, history):
+def get_chat_completion(**kwargs):
+    while True:
+        try:
+            return openai.ChatCompletion.create(**kwargs)
+        except openai.error.RateLimitError:
+            # Waiting 1 minute as that is how long it takes the rate limit to reset
+            print("Rate limit reached, waiting 1 minute")
+            time.sleep(60)
 
+
+def ask_gpt(persona_prompt, view, history):
     role = f"""\
         {persona_prompt}
         I want you to test an android application based on its view hierarchy. I will provide the view hierarchy in XML format and you will respond with a single action to perform. Only respond with the action and do not provide any explanation. The response must be valid JSON. The supported actions are as follows
@@ -156,7 +165,7 @@ def ask_gpt(persona_prompt, view, history):
     while True:
         print(Fore.GREEN + "Messages")
         print_json(messages)
-        response = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=messages, top_p=0.8)
+        response = get_chat_completion(model="gpt-3.5-turbo", messages=messages, top_p=0.8)
 
         content = response["choices"][0]["message"]["content"]
         if is_valid_action(content):
@@ -171,8 +180,6 @@ def ask_gpt(persona_prompt, view, history):
                     "content": "The response format was incorrect. Please provide a valid action in the specified JSON format.",
                 }
             )
-
-            time.sleep(1)  # Avoid rate limiting
 
 
 def get_action(response):
