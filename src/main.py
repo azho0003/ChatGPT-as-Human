@@ -12,11 +12,15 @@ import os
 import shutil
 from collections import Counter
 
+OUTPUT_FOLDER = "output"
+TEMP_FOLDER = "temp"
+
 
 def set_working_directory():
     abspath = os.path.abspath(__file__)
     dname = os.path.dirname(abspath)
-    os.chdir(dname)
+    root = os.path.join(dname, "..")
+    os.chdir(root)
 
 
 # TODO : Change the role name with whatever you want
@@ -45,13 +49,19 @@ def setup():
 
 
 def download_view_hierarchy():
+    if not os.path.exists(TEMP_FOLDER):
+        os.mkdir(TEMP_FOLDER)
+
+    filename = os.path.join(TEMP_FOLDER, "window_dump.xml")
+    if os.path.exists(filename):
+        os.remove(filename)
+
     # sleep for 2 secs in case the page is not fully loaded
     time.sleep(2)
-    if os.path.exists("window_dump.xml"):
-        os.remove("window_dump.xml")
-    filename = "window_dump.xml"
+
     subprocess.run("adb shell uiautomator dump", shell=True)
     subprocess.run(f"adb pull /sdcard/window_dump.xml {filename}", shell=True)
+
     return filename
 
 
@@ -110,19 +120,19 @@ def is_valid_action(content):
 
 def ask_gpt(view, history):
 
-    role = f"""
-            You are a {role_name} using this app. Given the view hierarchy in XML format and you will
-            respond with a single action to perform.
+    role = f"""\
+            You are a {role_name} using this app. Given the view hierarchy in XML format and you will \
+            respond with a single action to perform. \
             The supported actions are "click","send_keys". For example
             ```
             {{"action": "click", "resource-id": "com.sec.android.app.popupcalculator:id/calc_keypad_btn_03"}},
             ```
-            Only respond with the action, do not provide any explanation. Do not repeat any actions in the provided history.
+            Only respond with the action, do not provide any explanation. Do not repeat any actions in the provided history.\
             """
 
     history_str = json.dumps(history, indent=4)
 
-    prompt = f"""
+    prompt = f"""\
                The view hierarchy is currently:
                ```
                {view}
@@ -130,7 +140,7 @@ def ask_gpt(view, history):
                Do not perform any action from the following history:
                ```
                {history_str}
-               ```
+               ```\
                """
 
     messages = [
@@ -255,7 +265,7 @@ if __name__ == "__main__":
     page_counter = Counter()
 
     for round_num in range(1, rounds + 1):
-        folder_name = f"{role_name.replace(' ', '_')}_{round_num}"
+        folder_name = os.path.join(OUTPUT_FOLDER, f"{role_name.replace(' ', '_')}_{round_num}")
         create_folder(folder_name)
 
         timer = 0
@@ -282,7 +292,7 @@ if __name__ == "__main__":
                 get_back()
                 continue
 
-            screenshot_filename = f"{folder_name}/action_{action['action']}_{len(history)}.png"
+            screenshot_filename = os.path.join(folder_name, f"action_{action['action']}_{len(history)}.png")
             capture_screenshot(screenshot_filename)
 
             history.append(action)
