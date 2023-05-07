@@ -293,8 +293,11 @@ def go_to_app_home_screen(package_name, activity_name):
 
 
 if __name__ == "__main__":
+    # the set up function sets the current working directory and some variables we need
     setup()
+    # this function reads the personas.json file and prints to console the option we pick
     persona_name, persona_prompt = select_persona()
+    # the package name is the identifier of the app and the activity name the identifier of the screen
     app_package_name, app_activity_name = get_current_app_info()
 
     # TODO : Change this rounds number with whatever you want
@@ -311,7 +314,9 @@ if __name__ == "__main__":
 
         # TODO : Change this timer number with whatever you want
         while timer < 5:
+            # download the view hierarchy file of the screen in XML format
             filename = download_view_hierarchy()
+            # remove the attributes which are not needed
             (view, stripped_view) = get_view_hierarchy(filename)
             response = ask_gpt(persona_prompt, stripped_view, history)
             action = get_action(response)
