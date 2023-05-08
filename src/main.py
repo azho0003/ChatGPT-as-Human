@@ -16,7 +16,7 @@ from pick import pick
 OUTPUT_FOLDER = "output"
 TEMP_FOLDER = "temp"
 
-
+clickable_elements =[]
 
 persona_prompt = {
   "young_adult_1": "I want you to act as a 22 year old university student. You are male, ethnically White Australian and speak English as a first language. You are very familiar with modern technology and have been using a smartphone since you were 10.",
@@ -32,8 +32,8 @@ def set_working_directory():
     os.chdir(root)
 
 
-def detect_text_in_edit_widget(xml_dump):
-    root = ET.fromstring(xml_dump)
+def detect_text_in_edit_widget(view):
+    root = view.getroot()
     input_boxes = root.findall(".//node[@class='android.widget.EditText']")
     status = ""
 
@@ -71,58 +71,58 @@ def setup():
 
 
 def download_view_hierarchy():
-    if not os.path.exists(TEMP_FOLDER):
-        os.mkdir(TEMP_FOLDER)
-
-    filename = os.path.join(TEMP_FOLDER, "window_dump.xml")
-    if os.path.exists(filename):
-        os.remove(filename)
-
     # sleep for 2 secs in case the page is not fully loaded
     time.sleep(2)
+    if os.path.exists("window_dump.xml"):
+        os.remove("window_dump.xml")
+    filename = "window_dump.xml"
 
-    subprocess.run("adb shell uiautomator dump", shell=True)
-    subprocess.run(f"adb pull /sdcard/window_dump.xml {filename}", shell=True)
-
+    subprocess.run(["adb shell uiautomator dump"], shell=True)
+    subprocess.run([f"adb pull /sdcard/window_dump.xml {filename}"], shell=True)
     return filename
 
 
-def get_view_hierarchy(filename):
-    tree = ET.parse(filename)
+def traverse_view_hierarchy(node):
+    is_clickable = node.attrib.get('clickable', '').lower() == 'true'
+
+    if is_clickable:
+        clickable_elements.append(node.attrib)
+
+    for child in node:
+        traverse_view_hierarchy(child)
+
+def final_res ():
+    tree = ET.parse('window_dump.xml')
     root = tree.getroot()
+    traverse_view_hierarchy(root)
 
-    remove_attribs = [
-        "index",
-        "package",
-        "checkable",
-        "checked",
-        "focusable",
-        "focused",
-        "password",
-        "selected",
-        "enabled",
-        "scrollable",
-    ]
 
-    for elem in root.iter():
-        # Remove namespace information
-        elem.tag = elem.tag.split("}")[-1]
+    print("Clickable elements:")
+    final_view = []
+    for item in clickable_elements:
+        if not item.get("NAF"):
+            final_view.append(item)
 
-        resource_id = elem.attrib.get("resource-id")
+    for item in final_view:
+        del item['clickable']
+        del item['index']
+        del item['long-clickable']
+        del item['package']
+        del item['checkable']
+        del item['checked']
+        del item['focused']
+        del item['focusable']
+        del item['password']
+        del item['selected']
+        del item['enabled']
+        del item['scrollable']
 
-        if not resource_id:
-            elem.attrib.clear()
+        if (not item.get('text')) and (not item.get('content-desc')):
+            del item['text']
+            del item['content-desc']
 
-        if "Layout" in elem.attrib.get("class", "") or elem.attrib.get("clickable") != "true":
-            elem.attrib.clear()
 
-        for attrib in remove_attribs:
-            elem.attrib.pop(attrib, None)
-
-    stripped = ET.tostring(root, encoding="utf-8", method="xml").decode("utf-8").replace("\n", "").replace("\r", "")
-    full = ET.parse(filename)
-
-    return full, stripped
+    return tree,final_view
 
 
 def is_valid_action(content,input_boxes_status):
@@ -159,10 +159,10 @@ def get_chat_completion(**kwargs):
             time.sleep(60)
 
 
-def ask_gpt(persona_prompt,view, history,input_boxes_status):
+def ask_gpt(persona_prompt,view,history,input_boxes_status):
     role = f"""\
         {persona_prompt}
-        I want you to test an android application based on its view hierarchy. I will provide the view hierarchy in XML format and you will respond with a single action to perform. Only respond with the action and do not provide any explanation. Do not provide me the actions in the history list.Only perform the "enter" action to submit the text if there is a filled text box.The response must be valid JSON. The supported actions are as follows
+        I want you to test an android application based on its view hierarchy. I will provide the view hierarchy in XML format and you will respond with a single action to perform. Only respond with the action and do not provide any explanation.Only perform the "enter" action to submit the text if there is a filled text box.The response must be valid JSON. The supported actions are as follows
         {{"action": "click", "resource-id": "..."}}
         {{"action": "send_keys", text: "..."}}
         {{action": "back"}}
@@ -170,19 +170,26 @@ def ask_gpt(persona_prompt,view, history,input_boxes_status):
         {{"action": "scroll","direction": "..."}}
         """
 
+    history_str = json.dumps(history, indent=4)
+
     prompt = f"""\
-        Give me the next action to perform, where the view hierarchy for the application being tested is
+        Give me the next action to perform, where the first part of the view hierarchy for the application being tested is
         ```
         {view}
         ```
+        Do not perform any action from the following history:
+               ```
+               {history_str}
+               ```
         """
+
 
     messages = [
         {"role": "system", "content": dedent(role)},
         {"role": "user", "content": "What actions have you performed previously within this application?"},
         {"role": "assistant", "content": json.dumps(history)},
         {"role": "assistant", "content": "Input boxes status: " + input_boxes_status},
-        {"role": "user", "content": dedent(prompt)},
+        {"role": "user", "content": dedent(prompt)}
     ]
 
     while True:
@@ -329,6 +336,25 @@ def go_to_app_home_screen(package_name, activity_name):
     os.system(f"adb shell monkey -p {package_name} -c android.intent.category.LAUNCHER 1")
     time.sleep(2)
 
+def clickable_elements_to_natural_language(elements):
+    sentences = []
+    for element in elements:
+        if element['class'] == 'android.widget.Button':
+            if element['text']:
+                sentences.append(f"Click the '{element['text']}' button.")
+            else:
+                sentences.append("Click the button.")
+        elif element['class'] == 'android.widget.TextView':
+            if element['text']:
+                sentences.append(f"Click the '{element['text']}' text.")
+            else:
+                sentences.append("Click the text.")
+        elif element['class'] == 'android.view.View':
+            if element['text']:
+                sentences.append(f"Click the '{element['text']}' view.")
+            else:
+                sentences.append("Click the view.")
+    return ' '.join(sentences)
 
 if __name__ == "__main__":
 
@@ -358,10 +384,12 @@ if __name__ == "__main__":
 
             # TODO : Change this timer number with whatever you want
             while timer < 5:
+                clickable_elements = []
                 filename = download_view_hierarchy()
-                (view, stripped_view) = get_view_hierarchy(filename)
-                input_boxes_status = detect_text_in_edit_widget(stripped_view)
-                response = ask_gpt(persona_text, stripped_view, history, input_boxes_status)
+                (view,stripped_view) = final_res()
+                print(stripped_view[1:100])
+                input_boxes_status = detect_text_in_edit_widget(view)
+                response = ask_gpt(persona_text,stripped_view, history, input_boxes_status)
                 action = get_action(response)
 
                 if action["action"] == "click":
