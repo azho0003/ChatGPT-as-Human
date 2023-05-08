@@ -129,7 +129,7 @@ def is_valid_action(content):
     # the resource-id is the id of the button the action is performing on
     try:
         action = json.loads(content.replace("`", ""))
-        if "action" in action and action["action"] in {"click", "send_keys"}:
+        if "action" in action and action["action"] in {"click", "send_keys", "long-clickable"}:
             if action["action"] == "click" and "resource-id" in action:
                 return True
             elif action["action"] == "send_keys" and "text" in action:
@@ -163,6 +163,7 @@ def ask_gpt(persona_prompt, view, history):
         {{"action": "back"}}
         {{"action": "scroll", "resource-id", "direction": "...", "amount": …}}
         {{"action": "hold", "resource-id": "..."}}
+        {{"action": "long-clickable", "resource-id": "..."}}
         """
 
     prompt = f"""\
@@ -214,6 +215,8 @@ def perform_actions(action, view):
     match action["action"]:
         case "click":
             success = click_element(action["resource-id"], view)
+        case "long-clickable":
+            success = long_click_element(action["resource-id"], view)
         case "send_keys":
             input_text(action["text"])
             success = True
@@ -243,6 +246,21 @@ def click_element(resource, view):
     x = (int(matches[0]) + int(matches[2])) / 2
     y = (int(matches[1]) + int(matches[3])) / 2
     subprocess.run(f"adb shell input tap {x} {y}", shell=True)
+    return True
+
+def long_click_element(resource, view):
+    root = view.getroot()
+    elem = root.find(f'.//node[@resource-id="{resource}"]')
+
+    if elem is None:
+        print(f"Element with resource-id '{resource}' not found.")
+        return False
+
+    bounds = elem.attrib.get("bounds")
+    matches = re.findall("\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)[0]
+    x = (int(matches[0]) + int(matches[2])) / 2
+    y = (int(matches[1]) + int(matches[3])) / 2
+    subprocess.run(f"adb shell input swipe {x} {y} {x} {y} {2000}", shell=True)
     return True
 
 
@@ -322,6 +340,9 @@ if __name__ == "__main__":
             action = get_action(response)
 
             if action["action"] == "click":
+                page_counter[action["resource-id"]] += 1
+
+            if action["action"] == "long-clickable":
                 page_counter[action["resource-id"]] += 1
 
             # Perform the action and check if it was successful
