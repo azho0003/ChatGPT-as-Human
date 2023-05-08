@@ -17,6 +17,14 @@ OUTPUT_FOLDER = "output"
 TEMP_FOLDER = "temp"
 
 
+
+persona_prompt = {
+  "young_adult_1": "I want you to act as a 22 year old university student. You are male, ethnically White Australian and speak English as a first language. You are very familiar with modern technology and have been using a smartphone since you were 10.",
+  "elderly": "I want you to act as an 80 year old retiree. At your age, you are slow to respond to change and navigate through a phone slowly. You prefer to stay away from technology and only use mobile phones for the minimum required tasks.",
+}
+
+
+
 def set_working_directory():
     abspath = os.path.abspath(__file__)
     dname = os.path.dirname(abspath)
@@ -24,25 +32,30 @@ def set_working_directory():
     os.chdir(root)
 
 
-def select_persona():
-    with open("src/personas.json") as f:
-        personas = json.load(f)
+def detect_text_in_edit_widget(xml_dump):
+    root = ET.fromstring(xml_dump)
+    input_boxes = root.findall(".//node[@class='android.widget.EditText']")
+    status = ""
 
-    options = list(personas.keys())
-    persona_name, index = pick(options, "Select persona")
-    persona_prompt = personas[persona_name]
-    print("Selected persona:", persona_name)
+    if input_boxes:
+        for input_box in input_boxes:
+            resource_id = input_box.get("resource-id")
+            text = input_box.get("text")
 
-    return persona_name, persona_prompt
+            if text:
+                status += f"Input box ({resource_id}) has text: {text}\n"
+            else:
+                status += f"Input box ({resource_id}) is empty.\n"
+    else:
+        status = "No input boxes found."
+    return status.strip()
+
 
 
 def input_text(text):
     text = text.replace(" ", "%s")
     os.system(f"""adb shell input text \"{text}\"""")
     time.sleep(2)
-    os.system(f"""adb shell input keyevent 66""")
-    time.sleep(2)
-    os.system(f"""adb shell input keyevent 66""")
 
 
 def print_json(json_obj):
@@ -80,7 +93,6 @@ def get_view_hierarchy(filename):
 
     remove_attribs = [
         "index",
-        "text",
         "package",
         "checkable",
         "checked",
@@ -113,13 +125,19 @@ def get_view_hierarchy(filename):
     return full, stripped
 
 
-def is_valid_action(content):
+def is_valid_action(content,input_boxes_status):
     try:
         action = json.loads(content.replace("`", ""))
-        if "action" in action and action["action"] in {"click", "send_keys"}:
+        if "action" in action and action["action"] in {"click", "send_keys","scroll","enter"}:
             if action["action"] == "click" and "resource-id" in action:
                 return True
-            elif action["action"] == "send_keys" and "text" in action:
+            elif action["action"] == "send_keys" and "text" in action and input_boxes_status != "No input boxes found.":
+                return True
+            elif action["action"] == "scroll" and "direction" in action:
+                return True
+            elif action["action"] == "back":
+                return True
+            elif action["action"] == "enter":
                 return True
     except json.JSONDecodeError:
         pass
@@ -141,15 +159,15 @@ def get_chat_completion(**kwargs):
             time.sleep(60)
 
 
-def ask_gpt(persona_prompt, view, history):
+def ask_gpt(persona_prompt,view, history,input_boxes_status):
     role = f"""\
         {persona_prompt}
-        I want you to test an android application based on its view hierarchy. I will provide the view hierarchy in XML format and you will respond with a single action to perform. Only respond with the action and do not provide any explanation. The response must be valid JSON. The supported actions are as follows
+        I want you to test an android application based on its view hierarchy. I will provide the view hierarchy in XML format and you will respond with a single action to perform. Only respond with the action and do not provide any explanation. Do not provide me the actions in the history list.Only perform the "enter" action to submit the text if there is a filled text box.The response must be valid JSON. The supported actions are as follows
         {{"action": "click", "resource-id": "..."}}
-        {{"action": "send_keys", keys: "..."}}
-        {{"action": "back"}}
-        {{"action": "scroll", "resource-id", "direction": "...", "amount": …}}
-        {{"action": "hold", "resource-id": "..."}}
+        {{"action": "send_keys", text: "..."}}
+        {{action": "back"}}
+        {{"action": "enter"}}
+        {{"action": "scroll","direction": "..."}}
         """
 
     prompt = f"""\
@@ -163,6 +181,7 @@ def ask_gpt(persona_prompt, view, history):
         {"role": "system", "content": dedent(role)},
         {"role": "user", "content": "What actions have you performed previously within this application?"},
         {"role": "assistant", "content": json.dumps(history)},
+        {"role": "assistant", "content": "Input boxes status: " + input_boxes_status},
         {"role": "user", "content": dedent(prompt)},
     ]
 
@@ -174,7 +193,8 @@ def ask_gpt(persona_prompt, view, history):
         time_taken = response_arr[1]
 
         content = response["choices"][0]["message"]["content"]
-        if is_valid_action(content):
+        print(content)
+        if is_valid_action(content,input_boxes_status):
             print(Fore.GREEN + "Response")
             print_json(response)
             print("Time Taken for Response = " + str(time_taken))
@@ -184,7 +204,15 @@ def ask_gpt(persona_prompt, view, history):
             messages.append(
                 {
                     "role": "user",
-                    "content": "The response format was incorrect. Please provide a valid action in the specified JSON format.",
+                    "content": f"""\
+                    The response format was incorrect. Please give me another action or keep the same action but provide it in the specified JSON format following the examples
+                     {{"action": "click", "resource-id": "..."}}
+                     {{"action": "send_keys", text: "..."}}
+                     {{action": "back"}}
+                     {{"action": "enter"}}
+                     {{"action": "scroll","direction": "..."}}
+                    """
+                               ,
                 }
             )
 
@@ -200,16 +228,46 @@ def perform_actions(action, view):
 
     match action["action"]:
         case "click":
-            success = click_element(action["resource-id"], view)
+            click_element(action["resource-id"], view)
+            success = True
         case "send_keys":
             input_text(action["text"])
             success = True
+        case "scroll":
+            success = scroll(action["direction"])
         case "back":
             get_back()
+            success = True
+        case "enter":
+            enter_action()
             success = True
 
     return success
 
+
+
+def enter_action():
+    os.system(f"""adb shell input keyevent 66""")
+    os.system(f"""adb shell input keyevent 66""")
+    time.sleep(2)
+
+
+def scroll(direction):
+    if direction not in {"up", "down", "left", "right"}:
+        print(f"Invalid scroll direction: {direction}")
+        return False
+
+    keyevent_map = {
+        "up": "adb shell input swipe 500 500 500 1500 100",
+        "down": "adb shell input swipe 500 1500 500 500 100",
+        "left": "adb shell input swipe 500 500 1500 500 100",
+        "right": "adb shell input swipe 1500 500 500 500 100",
+    }
+
+    keyevent = keyevent_map[direction]
+    os.system(f"{keyevent}")
+    time.sleep(1)
+    return True
 
 def get_back():
     # back to previous activity
@@ -268,58 +326,71 @@ def get_current_app_info():
 
 def go_to_app_home_screen(package_name, activity_name):
     os.system(f"adb shell am force-stop {package_name}")
-    os.system(f"adb shell am start -n {package_name}/{activity_name}")
+    os.system(f"adb shell monkey -p {package_name} -c android.intent.category.LAUNCHER 1")
     time.sleep(2)
 
 
 if __name__ == "__main__":
+
+
     setup()
-    persona_name, persona_prompt = select_persona()
     app_package_name, app_activity_name = get_current_app_info()
 
     # TODO : Change this rounds number with whatever you want
     rounds = 3
 
-    page_counter = Counter()
 
-    for round_num in range(1, rounds + 1):
-        folder_name = os.path.join(OUTPUT_FOLDER, f"{persona_name.replace(' ', '_')}_{round_num}")
-        create_folder(folder_name)
+    for persona_name, persona_text in persona_prompt.items():
+        page_counter = Counter()
 
-        timer = 0
-        history = []
+        all_rounds_actions = []
 
-        # TODO : Change this timer number with whatever you want
-        while timer < 5:
-            filename = download_view_hierarchy()
-            (view, stripped_view) = get_view_hierarchy(filename)
-            response = ask_gpt(persona_prompt, stripped_view, history)
-            action = get_action(response)
+        final_all_rounds_actions = []
 
-            if action["action"] == "click":
-                page_counter[action["resource-id"]] += 1
+        for round_num in range(1, rounds + 1):
+            folder_name = os.path.join(OUTPUT_FOLDER, f"{persona_name}_{round_num}")
+            create_folder(folder_name)
 
-            # Perform the action and check if it was successful
-            click_successful = perform_actions(action, view)
+            timer = 0
+            history = []
 
-            # stop for 2s for screenshot
-            time.sleep(2)
+            round_action = []
 
-            # If the click is unsuccessful, go back and ask GPT for another action
-            if not click_successful:
-                get_back()
-                continue
+            # TODO : Change this timer number with whatever you want
+            while timer < 5:
+                filename = download_view_hierarchy()
+                (view, stripped_view) = get_view_hierarchy(filename)
+                input_boxes_status = detect_text_in_edit_widget(stripped_view)
+                response = ask_gpt(persona_text, stripped_view, history, input_boxes_status)
+                action = get_action(response)
 
-            screenshot_filename = os.path.join(folder_name, f"action_{action['action']}_{len(history)}.png")
-            capture_screenshot(screenshot_filename)
+                if action["action"] == "click":
+                    page_counter[action["resource-id"]] += 1
 
-            history.append(action)
-            timer += 1
-            time.sleep(2)
+                # Perform the action and check if it was successful
+                click_successful = perform_actions(action, view)
 
-        go_to_app_home_screen(app_package_name, app_activity_name)
+                # stop for 2s for screenshot
+                time.sleep(2)
 
-    # Print the top 5 resource-id the script will click
-    print("\nTop 5 app pages the script wants to go to:")
-    for resource_id, count in page_counter.most_common(5):
-        print(f"{resource_id}: {count} times")
+                # If the click is unsuccessful, go back and ask GPT for another action
+                if not click_successful:
+                    get_back()
+                    continue
+
+                screenshot_filename = os.path.join(folder_name, f"action_{action['action']}_{len(history)}.png")
+                capture_screenshot(screenshot_filename)
+
+                history.append(action)
+                round_action.append(action)
+                timer += 1
+                time.sleep(2)
+            final_all_rounds_actions.append(round_action)
+            go_to_app_home_screen(app_package_name, app_activity_name)
+
+        # Print the top 5 resource-id the script will click
+        print("\nTop 5 resource_id the script performed actions on:")
+        for resource_id, count in page_counter.most_common(5):
+            print(f"{persona_name} , {resource_id}: {count} times")
+
+        print(f"{persona_name},{final_all_rounds_actions}")
