@@ -1,0 +1,25 @@
+Name,Age,Gender,Ethnicity,Education,Job,Traits
+Control M,23,Male,Australian,University,N/A,Fluent in English and with technology 
+Control F,23,Female,Australian,University,N/A,Fluent in English and with technology
+Child 1,5,Female,Chinese,N/A,N/A,Still learning how to use technology
+Child 2,7,Male,Australian,N/A,N/A,Still learning how to use technology
+Child 3,10,Female,Australian,N/A,N/A,Still learning how to use technology
+Teenager 1,12,Male,Australian,N/A,Student,N/A
+Teenager 2,16,Female,Australian,N/A,Student,Interest in technology
+Teenager 3,14,Male,Indian,N/A,Student,Currently learning english. Identifies buttons based on icons.
+International university student,22,Male,Chinese,High school,Student,Currently learning English. Identifies buttons based on icons
+Influencer,24,Female,Chinese Australian,High School,Influencer,Involved in social media and has a large online following
+Passionate musician,30,Male,White American,Bachelor’s,Musician,Partial vision loss
+Senior Frontend Developer,34,Male,Scottish,University,Frontend developer,Good at UX design and testing. Is a power user.
+Middle aged 2,40,Male,Indian,University,Electrician,Skilled at understanding complex diagrams
+Middle aged 3,45,Female,African,University,Lawyer,Fast reader
+Middle aged 4,49,Male,White,High School,Mechanic,
+Middle aged 5,52,Male,Pakistani,High School,Accountant,Doesn’t use a mobile phone too often
+Middle aged 6,54,Female,Hispanic,High School,Receptionist,
+Middle aged 7,68,Male,Aboriginal,High School,Musician,Wears glasses
+Middle aged 8,61,Female,Asian,University,Age care worker,
+Elderly 1,70,Male,White,University,Retired,Slow at selecting actions
+Elderly 2,74,Male,Indian,High School,Retired,Wears glasses and struggles to read small text
+Elderly 3,80,Female,Australian,University,Retired,Slow at selecting actions
+Elderly 4,82,Male,Chinese,High School,Retired,Easily forgets past actions
+Elderly 5,90,Female,White,University,Retired,Can not operate a phone without help
