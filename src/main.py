@@ -217,8 +217,10 @@ def ask_gpt(persona_prompt, view, history, input_boxes_status, view_diff):
         ```
         {view}
         ```
-        Here is a git diff of the view hierarchy that has changed since your last action
+        Here is a git diff of the view hierarchy since your last action
+        ```
         {view_diff}
+        ```
         Do not perform any action from the following history:
         ```
         {history_str}
