@@ -80,13 +80,19 @@ def setup():
     config = dotenv.dotenv_values(".env")
     openai.api_key = config["OPENAI_API_KEY"]
 
+    shutil.rmtree(TEMP_FOLDER)
+
 
 def download_view_hierarchy():
+    if not os.path.exists(TEMP_FOLDER):
+        os.mkdir(TEMP_FOLDER)
+
     # sleep for 2 secs in case the page is not fully loaded
     time.sleep(2)
-    if os.path.exists("window_dump.xml"):
-        os.remove("window_dump.xml")
-    filename = "window_dump.xml"
+
+    filename = os.path.join(TEMP_FOLDER, "window_dump.xml")
+    if os.path.exists(filename):
+        os.remove(filename)
 
     subprocess.run("adb shell uiautomator dump", shell=True)
     subprocess.run(f"adb pull /sdcard/window_dump.xml {filename}", shell=True)
@@ -103,8 +109,8 @@ def traverse_view_hierarchy(node):
         traverse_view_hierarchy(child)
 
 
-def final_res():
-    tree = ET.parse("window_dump.xml")
+def strip_view_hierarchy(filename):
+    tree = ET.parse(filename)
     root = tree.getroot()
     traverse_view_hierarchy(root)
 
@@ -172,12 +178,12 @@ def get_chat_completion(**kwargs):
 def ask_gpt(persona_prompt, view, history, input_boxes_status):
     role = f"""\
         {persona_prompt}
-        I want you to test an android application based on its view hierarchy. I will provide the view hierarchy in XML format and you will respond with a single action to perform. Only respond with the action and do not provide any explanation.Only perform the "enter" action to submit the text if there is a filled text box.The response must be valid JSON. The supported actions are as follows
+        I want you to test an android application based on its view hierarchy. I will provide the list of elements in the view hierarchy and you will respond with a single action to perform. Only respond with the action and do not provide any explanation.Only perform the "enter" action to submit the text if there is a filled text box.The response must be valid JSON. The supported actions are as follows
         {{"action": "click", "resource-id": "..."}}
         {{"action": "send_keys", text: "..."}}
-        {{action": "back"}}
+        {{"action": "back"}}
         {{"action": "enter"}}
-        {{"action": "scroll","direction": "..."}}
+        {{"action": "scroll", "direction": "..."}}
         """
 
     history_str = json.dumps(history, indent=4)
@@ -188,9 +194,9 @@ def ask_gpt(persona_prompt, view, history, input_boxes_status):
         {view}
         ```
         Do not perform any action from the following history:
-               ```
-               {history_str}
-               ```
+        ```
+        {history_str}
+        ```
         """
 
     messages = [
@@ -220,14 +226,16 @@ def ask_gpt(persona_prompt, view, history, input_boxes_status):
             messages.append(
                 {
                     "role": "user",
-                    "content": f"""\
-                    The response format was incorrect. Please give me another action or keep the same action but provide it in the specified JSON format following the examples
-                     {{"action": "click", "resource-id": "..."}}
-                     {{"action": "send_keys", text: "..."}}
-                     {{action": "back"}}
-                     {{"action": "enter"}}
-                     {{"action": "scroll","direction": "..."}}
-                    """,
+                    "content": dedent(
+                        f"""\
+                        The response format was incorrect. Please give me another action or keep the same action but provide it in the specified JSON format following the examples
+                        {{"action": "click", "resource-id": "..."}}
+                        {{"action": "send_keys", text: "..."}}
+                        {{"action": "back"}}
+                        {{"action": "enter"}}
+                        {{"action": "scroll","direction": "..."}}
+                        """
+                    ),
                 }
             )
 
@@ -396,7 +404,7 @@ if __name__ == "__main__":
         while timer < 5:
             clickable_elements = []
             filename = download_view_hierarchy()
-            (view, stripped_view) = final_res()
+            (view, stripped_view) = strip_view_hierarchy(filename)
             input_boxes_status = detect_text_in_edit_widget(view)
             response = ask_gpt(persona_prompt, stripped_view, history, input_boxes_status)
             action = get_action(response)
