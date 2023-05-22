@@ -12,17 +12,29 @@ import os
 import shutil
 from collections import Counter
 from pick import pick
+import csv
 
 OUTPUT_FOLDER = "output"
 TEMP_FOLDER = "temp"
 
-clickable_elements =[]
+clickable_elements = []
 
-persona_prompt = {
-  "young_adult_1": "I want you to act as a 22 year old university student. You are male, ethnically White Australian and speak English as a first language. You are very familiar with modern technology and have been using a smartphone since you were 10.",
-  "elderly": "I want you to act as an 80 year old retiree. At your age, you are slow to respond to change and navigate through a phone slowly. You prefer to stay away from technology and only use mobile phones for the minimum required tasks.",
-}
 
+def select_persona():
+    personas = {}
+    with open("src/personas.csv") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            personas[
+                row["Name"]
+            ] = f"I want you to act as a {row['Age']} year old {row['Gender']} {row['Ethnicity']}. You work as a {row['Job']} and {row['Traits']}."
+
+    options = list(personas.keys())
+    persona_name, index = pick(options, "Select persona")
+    persona_prompt = personas[persona_name]
+    print("Selected persona:", persona_name)
+
+    return persona_name.replace(" ", "_"), persona_prompt
 
 
 def set_working_directory():
@@ -51,7 +63,6 @@ def detect_text_in_edit_widget(view):
     return status.strip()
 
 
-
 def input_text(text):
     text = text.replace(" ", "%s")
     os.system(f"""adb shell input text \"{text}\"""")
@@ -77,13 +88,13 @@ def download_view_hierarchy():
         os.remove("window_dump.xml")
     filename = "window_dump.xml"
 
-    subprocess.run(["adb shell uiautomator dump"], shell=True)
-    subprocess.run([f"adb pull /sdcard/window_dump.xml {filename}"], shell=True)
+    subprocess.run("adb shell uiautomator dump", shell=True)
+    subprocess.run(f"adb pull /sdcard/window_dump.xml {filename}", shell=True)
     return filename
 
 
 def traverse_view_hierarchy(node):
-    is_clickable = node.attrib.get('clickable', '').lower() == 'true'
+    is_clickable = node.attrib.get("clickable", "").lower() == "true"
 
     if is_clickable:
         clickable_elements.append(node.attrib)
@@ -91,11 +102,11 @@ def traverse_view_hierarchy(node):
     for child in node:
         traverse_view_hierarchy(child)
 
-def final_res ():
-    tree = ET.parse('window_dump.xml')
+
+def final_res():
+    tree = ET.parse("window_dump.xml")
     root = tree.getroot()
     traverse_view_hierarchy(root)
-
 
     print("Clickable elements:")
     final_view = []
@@ -104,31 +115,30 @@ def final_res ():
             final_view.append(item)
 
     for item in final_view:
-        del item['clickable']
-        del item['index']
-        del item['long-clickable']
-        del item['package']
-        del item['checkable']
-        del item['checked']
-        del item['focused']
-        del item['focusable']
-        del item['password']
-        del item['selected']
-        del item['enabled']
-        del item['scrollable']
+        del item["clickable"]
+        del item["index"]
+        del item["long-clickable"]
+        del item["package"]
+        del item["checkable"]
+        del item["checked"]
+        del item["focused"]
+        del item["focusable"]
+        del item["password"]
+        del item["selected"]
+        del item["enabled"]
+        del item["scrollable"]
 
-        if (not item.get('text')) and (not item.get('content-desc')):
-            del item['text']
-            del item['content-desc']
+        if (not item.get("text")) and (not item.get("content-desc")):
+            del item["text"]
+            del item["content-desc"]
+
+    return tree, final_view
 
 
-    return tree,final_view
-
-
-def is_valid_action(content,input_boxes_status):
+def is_valid_action(content, input_boxes_status):
     try:
         action = json.loads(content.replace("`", ""))
-        if "action" in action and action["action"] in {"click", "send_keys","scroll","enter"}:
+        if "action" in action and action["action"] in {"click", "send_keys", "scroll", "enter"}:
             if action["action"] == "click" and "resource-id" in action:
                 return True
             elif action["action"] == "send_keys" and "text" in action and input_boxes_status != "No input boxes found.":
@@ -151,15 +161,15 @@ def get_chat_completion(**kwargs):
             time_start = time.time()
             reply = openai.ChatCompletion.create(**kwargs)
             time_end = time.time()
-            time_taken = time_end-time_start
-            return [reply,time_taken]
+            time_taken = time_end - time_start
+            return [reply, time_taken]
         except openai.error.RateLimitError:
             # Waiting 1 minute as that is how long it takes the rate limit to reset
             print("Rate limit reached, waiting 1 minute")
             time.sleep(60)
 
 
-def ask_gpt(persona_prompt,view,history,input_boxes_status):
+def ask_gpt(persona_prompt, view, history, input_boxes_status):
     role = f"""\
         {persona_prompt}
         I want you to test an android application based on its view hierarchy. I will provide the view hierarchy in XML format and you will respond with a single action to perform. Only respond with the action and do not provide any explanation.Only perform the "enter" action to submit the text if there is a filled text box.The response must be valid JSON. The supported actions are as follows
@@ -183,13 +193,12 @@ def ask_gpt(persona_prompt,view,history,input_boxes_status):
                ```
         """
 
-
     messages = [
         {"role": "system", "content": dedent(role)},
         {"role": "user", "content": "What actions have you performed previously within this application?"},
         {"role": "assistant", "content": json.dumps(history)},
         {"role": "assistant", "content": "Input boxes status: " + input_boxes_status},
-        {"role": "user", "content": dedent(prompt)}
+        {"role": "user", "content": dedent(prompt)},
     ]
 
     while True:
@@ -201,7 +210,7 @@ def ask_gpt(persona_prompt,view,history,input_boxes_status):
 
         content = response["choices"][0]["message"]["content"]
         print(content)
-        if is_valid_action(content,input_boxes_status):
+        if is_valid_action(content, input_boxes_status):
             print(Fore.GREEN + "Response")
             print_json(response)
             print("Time Taken for Response = " + str(time_taken))
@@ -218,8 +227,7 @@ def ask_gpt(persona_prompt,view,history,input_boxes_status):
                      {{action": "back"}}
                      {{"action": "enter"}}
                      {{"action": "scroll","direction": "..."}}
-                    """
-                               ,
+                    """,
                 }
             )
 
@@ -252,7 +260,6 @@ def perform_actions(action, view):
     return success
 
 
-
 def enter_action():
     os.system(f"""adb shell input keyevent 66""")
     os.system(f"""adb shell input keyevent 66""")
@@ -275,6 +282,7 @@ def scroll(direction):
     os.system(f"{keyevent}")
     time.sleep(1)
     return True
+
 
 def get_back():
     # back to previous activity
@@ -336,89 +344,90 @@ def go_to_app_home_screen(package_name, activity_name):
     os.system(f"adb shell monkey -p {package_name} -c android.intent.category.LAUNCHER 1")
     time.sleep(2)
 
+
 def clickable_elements_to_natural_language(elements):
     sentences = []
     for element in elements:
-        if element['class'] == 'android.widget.Button':
-            if element['text']:
+        if element["class"] == "android.widget.Button":
+            if element["text"]:
                 sentences.append(f"Click the '{element['text']}' button.")
             else:
                 sentences.append("Click the button.")
-        elif element['class'] == 'android.widget.TextView':
-            if element['text']:
+        elif element["class"] == "android.widget.TextView":
+            if element["text"]:
                 sentences.append(f"Click the '{element['text']}' text.")
             else:
                 sentences.append("Click the text.")
-        elif element['class'] == 'android.view.View':
-            if element['text']:
+        elif element["class"] == "android.view.View":
+            if element["text"]:
                 sentences.append(f"Click the '{element['text']}' view.")
             else:
                 sentences.append("Click the view.")
-    return ' '.join(sentences)
+    return " ".join(sentences)
+
 
 if __name__ == "__main__":
-
 
     setup()
     app_package_name, app_activity_name = get_current_app_info()
 
     # TODO : Change this rounds number with whatever you want
-    rounds = 3
+    rounds = 2
 
+    persona_name, persona_prompt = select_persona()
+    page_counter = Counter()
 
-    for persona_name, persona_text in persona_prompt.items():
-        page_counter = Counter()
+    all_rounds_actions = []
 
-        all_rounds_actions = []
+    final_all_rounds_actions = []
 
-        final_all_rounds_actions = []
+    for round_num in range(1, rounds + 1):
+        folder_name = os.path.join(OUTPUT_FOLDER, app_package_name, f"{persona_name}_{round_num}")
+        create_folder(folder_name)
 
-        for round_num in range(1, rounds + 1):
-            folder_name = os.path.join(OUTPUT_FOLDER, f"{persona_name}_{round_num}")
-            create_folder(folder_name)
+        timer = 0
+        history = []
 
-            timer = 0
-            history = []
+        round_action = []
 
-            round_action = []
+        capture_screenshot(os.path.join(folder_name, f"-1.png"))
 
-            # TODO : Change this timer number with whatever you want
-            while timer < 5:
-                clickable_elements = []
-                filename = download_view_hierarchy()
-                (view,stripped_view) = final_res()
-                print(stripped_view[1:100])
-                input_boxes_status = detect_text_in_edit_widget(view)
-                response = ask_gpt(persona_text,stripped_view, history, input_boxes_status)
-                action = get_action(response)
+        # TODO : Change this timer number with whatever you want
+        while timer < 5:
+            clickable_elements = []
+            filename = download_view_hierarchy()
+            (view, stripped_view) = final_res()
+            input_boxes_status = detect_text_in_edit_widget(view)
+            response = ask_gpt(persona_prompt, stripped_view, history, input_boxes_status)
+            action = get_action(response)
 
-                if action["action"] == "click":
-                    page_counter[action["resource-id"]] += 1
+            if action["action"] == "click":
+                page_counter[action["resource-id"]] += 1
 
-                # Perform the action and check if it was successful
-                click_successful = perform_actions(action, view)
+            # Perform the action and check if it was successful
+            click_successful = perform_actions(action, view)
 
-                # stop for 2s for screenshot
-                time.sleep(2)
+            # stop for 2s for screenshot
+            time.sleep(2)
 
-                # If the click is unsuccessful, go back and ask GPT for another action
-                if not click_successful:
-                    get_back()
-                    continue
+            # If the click is unsuccessful, go back and ask GPT for another action
+            if not click_successful:
+                get_back()
+                continue
 
-                screenshot_filename = os.path.join(folder_name, f"action_{action['action']}_{len(history)}.png")
-                capture_screenshot(screenshot_filename)
+            screenshot_filename = os.path.join(folder_name, f"{timer}_action_{action['action']}_{len(history)}.png")
+            capture_screenshot(screenshot_filename)
 
-                history.append(action)
-                round_action.append(action)
-                timer += 1
-                time.sleep(2)
-            final_all_rounds_actions.append(round_action)
-            go_to_app_home_screen(app_package_name, app_activity_name)
+            history.append(action)
+            round_action.append(action)
+            timer += 1
+            time.sleep(2)
+        final_all_rounds_actions.append(round_action)
+        go_to_app_home_screen(app_package_name, app_activity_name)
 
-        # Print the top 5 resource-id the script will click
-        print("\nTop 5 resource_id the script performed actions on:")
-        for resource_id, count in page_counter.most_common(5):
-            print(f"{persona_name} , {resource_id}: {count} times")
+    # Print the top 5 resource-id the script will click
+    print("\nTop 5 resource_id the script performed actions on:")
+    for resource_id, count in page_counter.most_common(5):
+        print(f"{persona_name}, {resource_id}: {count} times")
 
-        print(f"{persona_name},{final_all_rounds_actions}")
+    print(f"{persona_name}, {final_all_rounds_actions}")
