@@ -80,7 +80,8 @@ def setup():
     config = dotenv.dotenv_values(".env")
     openai.api_key = config["OPENAI_API_KEY"]
 
-    shutil.rmtree(TEMP_FOLDER)
+    if os.path.exists(TEMP_FOLDER):
+        shutil.rmtree(TEMP_FOLDER)
 
 
 def download_view_hierarchy():
