@@ -17,6 +17,9 @@ import csv
 OUTPUT_FOLDER = "output"
 TEMP_FOLDER = "temp"
 
+STRIPPED_FILENAME = os.path.join(TEMP_FOLDER, "window_dump_stripped.json")
+PREVIOUS_STRIPPED_FILENAME = os.path.join(TEMP_FOLDER, "window_dump_previous_stripped.json")
+
 clickable_elements = []
 
 
@@ -99,6 +102,18 @@ def download_view_hierarchy():
     return filename
 
 
+def calculate_view_diff():
+    if os.path.exists(PREVIOUS_STRIPPED_FILENAME):
+        diff_command = subprocess.run(
+            f"git diff --no-index {PREVIOUS_STRIPPED_FILENAME} {STRIPPED_FILENAME}",
+            shell=True,
+            capture_output=True,
+        )
+        return diff_command.stdout.decode("utf-8")
+    else:
+        return ""
+
+
 def traverse_view_hierarchy(node):
     is_clickable = node.attrib.get("clickable", "").lower() == "true"
 
@@ -138,6 +153,15 @@ def strip_view_hierarchy(filename):
             del item["text"]
             del item["content-desc"]
 
+    if os.path.exists(PREVIOUS_STRIPPED_FILENAME):
+        os.remove(PREVIOUS_STRIPPED_FILENAME)
+
+    if os.path.exists(STRIPPED_FILENAME):
+        os.rename(STRIPPED_FILENAME, PREVIOUS_STRIPPED_FILENAME)
+
+    with open(STRIPPED_FILENAME, "w") as file:
+        file.write(json.dumps(final_view, indent=4))
+
     return tree, final_view
 
 
@@ -175,7 +199,7 @@ def get_chat_completion(**kwargs):
             time.sleep(60)
 
 
-def ask_gpt(persona_prompt, view, history, input_boxes_status):
+def ask_gpt(persona_prompt, view, history, input_boxes_status, view_diff):
     role = f"""\
         {persona_prompt}
         I want you to test an android application based on its view hierarchy. I will provide the list of elements in the view hierarchy and you will respond with a single action to perform. Only respond with the action and do not provide any explanation.Only perform the "enter" action to submit the text if there is a filled text box.The response must be valid JSON. The supported actions are as follows
@@ -193,6 +217,8 @@ def ask_gpt(persona_prompt, view, history, input_boxes_status):
         ```
         {view}
         ```
+        Here is a git diff of the view hierarchy that has changed since your last action
+        {view_diff}
         Do not perform any action from the following history:
         ```
         {history_str}
@@ -406,7 +432,8 @@ if __name__ == "__main__":
             filename = download_view_hierarchy()
             (view, stripped_view) = strip_view_hierarchy(filename)
             input_boxes_status = detect_text_in_edit_widget(view)
-            response = ask_gpt(persona_prompt, stripped_view, history, input_boxes_status)
+            view_diff = calculate_view_diff()
+            response = ask_gpt(persona_prompt, stripped_view, history, input_boxes_status, view_diff)
             action = get_action(response)
 
             if action["action"] == "click":
