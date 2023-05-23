@@ -409,7 +409,7 @@ if __name__ == "__main__":
     app_package_name, app_activity_name = get_current_app_info()
 
     # TODO : Change this rounds number with whatever you want
-    rounds = 2
+    rounds = 1
 
     persona_name, persona_prompt = select_persona()
     page_counter = Counter()
