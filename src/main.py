@@ -427,7 +427,7 @@ if __name__ == "__main__":
 
         round_action = []
 
-        capture_screenshot(os.path.join(folder_name, f"-1.png"))
+        capture_screenshot(os.path.join(folder_name, f"0_initial.png"))
 
         # TODO : Change this timer number with whatever you want
         while timer < 5:
@@ -453,7 +453,7 @@ if __name__ == "__main__":
                 get_back()
                 continue
 
-            screenshot_filename = os.path.join(folder_name, f"{timer}_action_{action['action']}_{len(history)}.png")
+            screenshot_filename = os.path.join(folder_name, f"{timer+1}_{action['action']}.png")
             capture_screenshot(screenshot_filename)
 
             history.append(action)
