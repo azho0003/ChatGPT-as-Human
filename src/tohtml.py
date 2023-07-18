@@ -6,8 +6,8 @@ from glob import glob
 import os
 
 ######## ONLY NEED TO MODIFY HERE
-path2GTdir = "Datasets"
-path2OutputDir = "output_winter"
+path2GTdir = r"G:\Shared drives\ChatGPT - Winter Research\Deliverables\Data Collection\Norbert\Datasets"
+path2OutputDir = "output_winter_2"
 ########
 
 html = """
@@ -27,20 +27,23 @@ allGTFolders = glob(os.path.join(path2GTdir, "**"))
 for gtFolder in allGTFolders:
     all_pngs = glob(os.path.join(gtFolder, "**.png"))
     all_pngs = list(sorted(all_pngs, key=lambda x: int(os.path.basename(x).split(".")[0])))
-    curr_file = all_pngs[-1]
-    print(all_pngs, curr_file)
-    folder2gtFilePath[os.path.basename(gtFolder).lower()] = curr_file
-    # break
+    if len(all_pngs) > 0:
+        curr_file = all_pngs[-1]
+        print(all_pngs, curr_file)
+        folder2gtFilePath[os.path.basename(gtFolder).lower()] = curr_file
 
 # iterate each persona
 allPersonaFolder = glob(os.path.join(path2OutputDir, "**"))
 allPersonaFolder.sort()
 
+WIDTH = 200
+HEIGHT = 400
+
 for personaFolder in allPersonaFolder:  # [:1]:
     curr_persona = os.path.basename(personaFolder)
     # iterate all inner use case folders
     allUseCaseFolder = glob(os.path.join(personaFolder, "**"))
-    allUseCaseFolder.sort()
+    allUseCaseFolder.sort(key=str.casefold)
     for useCaseFolder in allUseCaseFolder:
         html += f"<tr><td><b>{curr_persona}</b></td>"
         html += f"<td><b>{os.path.basename(useCaseFolder)}</b></td>"
@@ -49,13 +52,16 @@ for personaFolder in allPersonaFolder:  # [:1]:
         if len(all_pngs) == 0:
             continue
         all_pngs = list(sorted(all_pngs, key=lambda x: int(os.path.basename(x).split(".")[0])))
+        has_error = os.path.exists(os.path.join(useCaseFolder, "error.log"))
 
         gtFilePath = folder2gtFilePath[os.path.basename(useCaseFolder).lower()]
         print(len(all_pngs))
         for pngPath in all_pngs:
-            html += f"""<td><img style="width:300px;height:600px" src="{pngPath}"></td>"""
+            html += f"""<td><img style="width:{WIDTH}px;height:{HEIGHT}px" src="{pngPath}"></td>"""
+        if has_error:
+            html += f"""<td style="background-color:red;border: 5px solid red;"><img style="width:{WIDTH}px;height:{HEIGHT}px;"></td>"""
 
-        html += f"""<td style="background-color:green;border: 5px solid green;"><img style="width:350px;height:600px" src="{gtFilePath}"></td>"""
+        html += f"""<td style="background-color:green;border: 5px solid green;"><img style="width:{WIDTH}px;height:{HEIGHT}px" src="{gtFilePath}"></td>"""
         html += "</tr>"
 
 html += """

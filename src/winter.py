@@ -10,41 +10,16 @@ import os
 import shutil
 from pick import pick
 import traceback
+import re
+import tiktoken
 
 DATASET_PATH = r"G:\Shared drives\ChatGPT - Winter Research\Deliverables\Data Collection\Norbert\Datasets"
+TASK_NAMES = os.path.join(DATASET_PATH, "tasknames.csv")
 
-OUTPUT_FOLDER = "output_winter"
+OUTPUT_FOLDER = "output_winter_2"
 
-# ROLE = dedent(
-#     """
-#     I want you to act as an Android UI tester. You will be provided the XML view hierarchy of an android app and a goal to achieve.
-#     You will respond the best action that works towards the goal. This may take multiple actions to achieve.
-
-#     The action must be a JSON object. The valid actions are listed below, with the explanation of any property placed in angle brackets.
-#     {"action": "click-resource", "resource-id": <The resource id of the element to click>}
-#     {"action": "click-location", "x": <The x coordinate to click>, "y": <The y coordinate to click>}
-#     {"action": "scroll", "direction": <The direction to scroll, can be up/down/left/right>}
-#     {"action": "send_keys", text: "..."}
-#     {"action": "back"}
-#     {"action": "enter"}
-#     {"action": "stop", "reason": <Why the testing should be stopped, this could be if the goal has been achieved>}
-
-#     This is an example of an input and output:
-
-#     ###
-#     Goal:
-#     View Top Stories
-
-#     Previous Actions:
-#     None
-
-#     Hierarchy:
-#     <hierarchy><node text="Top Stories" bounds="[47,244][261,301]" /></hierarchy>
-
-#     Next Action:
-#     {"action": "click-location", "x": 154, "y": 272.5}
-#     """
-# )
+MAX_TOKENS = 4097
+OUTPUT_TOKENS = 300
 
 PERSONAS = [
     {"name": "teen", "age": "13-19"},
@@ -60,14 +35,17 @@ ROLE = dedent(
     You will respond with the best action that works towards the goal. This may take multiple actions to achieve.
 
     The action must be a JSON object. The valid actions are listed below, with the explanation of any property placed in angle brackets.
-    {{"action": "tap", "x": <The x coordinate to tap>, "y": <The y coordinate to tap>, "reason": <An explanation of how this action works towards the goal>}}
-    {{"action": "send_keys", text: "...", "reason": <An explanation of how this action works towards the goal>}}
-    {{"action": "scroll", "direction": <The direction to scroll, can be up/down/left/right>, "reason": <An explanation of how this action works towards the goal>}}
+    {{"action": "tap", "id": <The id of the element to tap>, "reason": <An explanation of how this action works towards the goal>}}
+    {{"action": "type", "text": <The text to type into the focused element>, "reason": <An explanation of how this action works towards the goal>}}
+    {{"action": "scroll", "scroll-reference": <The scroll reference of the element to scroll>, "direction": <The direction to scroll, can be up/down/left/right>, "reason": <An explanation of how this action works towards the goal>}}
     {{"action": "back", "reason": <An explanation of how this action works towards the goal>}}
     {{"action": "enter", "reason": <An explanation of how this action works towards the goal>}}
     {{"action": "stop", "reason": <Why the testing should be stopped, this could be if the goal has been achieved>}}
 
+    Do not "scroll" more than 3 times in a row.
     Once the goal is achieved, you will respond with a "stop" action.
+    If there is a sign up screen, skip it or close it.
+    If the hierarchy does not show a related element, open the menu, settings or navigation drawer.
     This is an example of an input and output:
 
     ###
@@ -78,23 +56,23 @@ ROLE = dedent(
     None
 
     Hierarchy:
-    <hierarchy><node text="Top Stories" x="154" y="272" /></hierarchy>
+    <hierarchy><node text="Top Stories" id="4" /></hierarchy>
 
     Next Action:
-    {{"action": "tap", "x": 154, "y": 272, "By tapping on the top stories element, the top stories become visible which is the goal"}}
-    
+    {{"action": "tap", "id": "4", "reason": "By tapping on the top stories element, the top stories become visible which is the goal"}}
+
     ###
     Goal:
     View Top Stories
 
     Previous Actions:
-    {{"action": "tap", "x": 154, "y": 272, "By tapping on the top stories element, the top stories become visible which is the goal"}}
+    {{"action": "tap", "id": "4", "reason": "By tapping on the top stories element, the top stories become visible which is the goal"}}
 
     Hierarchy:
-    <hierarchy><node text="Top Story: New battery innovation" x="3" y="10" /></hierarchy>
+    <hierarchy><node text="Top Story: New battery innovation" id="7" /></hierarchy>
 
     Next Action:
-    {{"action": "stop", "The top story, new battery innovation is visible. This means the goal has been achieved and the testing can be stopped"}}
+    {{"action": "stop", "reason": "The top story, 'New battery innovation' is visible. This means the goal has been achieved and the testing can be stopped"}}
     """
 )
 
@@ -141,29 +119,104 @@ def get_view_hierarchy(filename):
     remove_attribs = [
         "index",
         "package",
-        # "checkable",
+        "checkable",
         # "checked",
-        # "focusable",
+        "focusable",
         # "focused",
-        # "password",
+        "password",
         # "selected",
-        # "enabled",
-        # "scrollable",
+        "enabled",
+        "scrollable",
+        "resource-id",
+        "NAF",
+        "bounds",
+        "clickable",
+        "rotation",
+        "long-clickable",
+        "class",
+        "content-desc",
     ]
+
+    tap_index = 0
+    global tap_id_position_map  # TODO: Don't have global
+    tap_id_position_map = {}
+
+    scroll_index = 0
+    global scroll_id_position_map  # TODO: Don't have global
+    scroll_id_position_map = {}
 
     for elem in root.iter():
         bounds = elem.attrib.get("bounds")
+
         if bounds:
             matches = re.findall("\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)[0]
             x = (int(matches[0]) + int(matches[2])) / 2
             y = (int(matches[1]) + int(matches[3])) / 2
-            elem.attrib["x"] = str(x)
-            elem.attrib["y"] = str(y)
-            elem.attrib.pop("bounds")
+
+            clickable = elem.attrib.get("clickable")
+            if clickable == "true":
+                elem.attrib["id"] = str(tap_index)
+                tap_id_position_map[str(tap_index)] = {"x": x, "y": y}
+                tap_index += 1
+
+            scrollable = elem.attrib.get("scrollable")
+            if scrollable == "true":
+                elem.attrib["scroll-reference"] = str(scroll_index)
+                scroll_id_position_map[str(scroll_index)] = {"x": x, "y": y}
+                scroll_index += 1
+
+        class_val = elem.attrib.get("class")
+        if class_val:
+            elem.tag = re.sub("\W+", "", class_val.split(".")[-1])
+
+        content_desc = elem.attrib.get("content-desc")
+        if content_desc:
+            elem.attrib["description"] = content_desc
+
+        resource_id = elem.attrib.get("resource-id")
+        if resource_id:
+            elem.attrib["resource"] = resource_id.split("/")[-1]
+
+        checkable = elem.attrib.get("checkable")
+        if checkable == "false":
+            elem.attrib.pop("checked", None)
+
+        for attrib in ["focused", "selected"]:
+            if elem.attrib.get(attrib) == "false":
+                elem.attrib.pop(attrib)
 
         for key, value in elem.attrib.copy().items():
-            if not value or value == "false" or key in remove_attribs:
+            if not value or key in remove_attribs:  # or value == "false"
                 elem.attrib.pop(key)
+
+    # Remove unnecessary elements
+    parent_map = {c: p for p in tree.iter() for c in p}
+
+    def clean(root):
+        for elem in root.iter():
+            if len(elem.attrib) == 0:
+                if len(elem) == 1:
+                    parent = parent_map.get(elem)
+                    if parent:
+                        print("Removing elem (1 child)", elem)
+                        for i, child in enumerate(parent):
+                            if child == elem:
+                                parent[i] = elem[0]
+                                return True
+                elif len(elem) == 0:
+                    parent = parent_map.get(elem)
+                    if parent:
+                        print("Removing elem (no child)", elem)
+                        try:
+                            parent.remove(elem)
+                        except ValueError:
+                            print("Failed to remove elem")
+                        return True
+        return False
+
+    i = 0
+    while clean(root) and i < 10:
+        i += 1
 
     stripped = ET.tostring(root, encoding="utf-8", method="xml").decode("utf-8").replace("\n", "").replace("\r", "")
 
@@ -175,16 +228,77 @@ def get_view_hierarchy(filename):
     return stripped
 
 
+def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
+    """Return the number of tokens used by a list of messages."""
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except KeyError:
+        print("Warning: model not found. Using cl100k_base encoding.")
+        encoding = tiktoken.get_encoding("cl100k_base")
+    if model in {
+        "gpt-3.5-turbo-0613",
+        "gpt-3.5-turbo-16k-0613",
+        "gpt-4-0314",
+        "gpt-4-32k-0314",
+        "gpt-4-0613",
+        "gpt-4-32k-0613",
+    }:
+        tokens_per_message = 3
+        tokens_per_name = 1
+    elif model == "gpt-3.5-turbo-0301":
+        tokens_per_message = 4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
+        tokens_per_name = -1  # if there's a name, the role is omitted
+    elif "gpt-3.5-turbo" in model:
+        print("Warning: gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613.")
+        return num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613")
+    elif "gpt-4" in model:
+        print("Warning: gpt-4 may update over time. Returning num tokens assuming gpt-4-0613.")
+        return num_tokens_from_messages(messages, model="gpt-4-0613")
+    else:
+        raise NotImplementedError(
+            f"""num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens."""
+        )
+    num_tokens = 0
+    for message in messages:
+        num_tokens += tokens_per_message
+        for key, value in message.items():
+            num_tokens += len(encoding.encode(value))
+            if key == "name":
+                num_tokens += tokens_per_name
+    num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
+    return num_tokens
+
+
+def get_model(messages):
+    tokens = num_tokens_from_messages(messages)
+    if tokens < MAX_TOKENS - OUTPUT_TOKENS:
+        model = "gpt-3.5-turbo"
+    else:
+        print("Using 16k model")
+        model = "gpt-3.5-turbo-16k"
+
+    return model
+
+
 def ask_gpt(history, view, task, persona):
     formatted_history = "\n".join(json.dumps(h) for h in history) if len(history) > 0 else "None"
+
+    if "scroll-reference" not in view:
+        print("Removing scroll action")
+        role_template = "\n".join(line for line in ROLE.split("\n") if "scroll" not in line)
+    else:
+        role_template = ROLE
+
     messages = [
-        {"role": "system", "content": ROLE.format(persona["name"], persona["age"])},
+        {"role": "system", "content": role_template.format(persona["name"], persona["age"])},
         {"role": "user", "content": PROMPT.format(task, formatted_history, view)},
     ]
     # print(messages)
 
+    model = get_model(messages)
+
     print("Getting ChatGPT response")
-    response = get_chat_completion(model="gpt-3.5-turbo", messages=messages)
+    response = get_chat_completion(model=model, messages=messages)
     # print(response)
 
     return response
@@ -194,7 +308,7 @@ def get_chat_completion(**kwargs):
     while True:
         try:
             return openai.ChatCompletion.create(**kwargs)
-        except openai.error.RateLimitError as e:
+        except (openai.error.RateLimitError, openai.error.ServiceUnavailableError) as e:
             print(e)
             # Waiting 1 minute as that is how long it takes the rate limit to reset
             print("Rate limit reached, waiting 1 minute")
@@ -207,12 +321,14 @@ def perform_action(action):
     match action["action"]:
         # case "click-resource":
         #     click_element(action["resource-id"], view)
+        # case "tap":
+        #     click_location(action["x"], action["y"])
         case "tap":
-            click_location(action["x"], action["y"])
-        case "send_keys":
+            click_element_by_id(action["id"])
+        case "type":
             input_text(action["text"])
         case "scroll":
-            scroll(action["direction"])
+            scroll(action["scroll-reference"], action["direction"])
         case "back":
             back_action()
         case "enter":
@@ -228,20 +344,30 @@ def input_text(text):
     os.system(f"""adb shell input text \"{text}\"""")
 
 
-def scroll(direction):
+def scroll(scroll_id, direction):
     if direction not in {"up", "down", "left", "right"}:
         print(f"Invalid scroll direction: {direction}")
         return False
 
-    keyevent_map = {
-        "up": "adb shell input swipe 500 500 500 1500 100",
-        "down": "adb shell input swipe 500 1500 500 500 100",
-        "left": "adb shell input swipe 500 500 1500 500 100",
-        "right": "adb shell input swipe 1500 500 500 500 100",
+    pos = scroll_id_position_map[scroll_id]
+    x = pos["x"]
+    y = pos["y"]
+
+    dx = {
+        "up": 0,
+        "down": 0,
+        "left": 300,
+        "right": -300,
     }
 
-    keyevent = keyevent_map[direction]
-    os.system(f"{keyevent}")
+    dy = {
+        "up": 300,
+        "down": -300,
+        "left": 0,
+        "right": 0,
+    }
+
+    os.system(f"adb shell input swipe {x} {y} {x+dx[direction]} {y+dy[direction]} 100")
     return True
 
 
@@ -253,19 +379,26 @@ def enter_action():
     os.system(f"""adb shell input keyevent 66""")
 
 
-def click_element(resource, view):
-    root = view.getroot()
-    elem = root.find(f'.//node[@resource-id="{resource}"]')
+# def click_element(resource, view):
+#     root = view.getroot()
+#     elem = root.find(f'.//node[@resource-id="{resource}"]')
 
-    if elem is None:
-        print(f"Element with resource-id '{resource}' not found.")
-        return False
+#     if elem is None:
+#         print(f"Element with resource-id '{resource}' not found.")
+#         return False
 
-    bounds = elem.attrib.get("bounds")
-    matches = re.findall("\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)[0]
-    x = (int(matches[0]) + int(matches[2])) / 2
-    y = (int(matches[1]) + int(matches[3])) / 2
-    click_location(x, y)
+#     bounds = elem.attrib.get("bounds")
+#     matches = re.findall("\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)[0]
+#     x = (int(matches[0]) + int(matches[2])) / 2
+#     y = (int(matches[1]) + int(matches[3])) / 2
+#     click_location(x, y)
+
+
+def click_element_by_id(id):
+    pos = tap_id_position_map.get(id)
+    if pos:
+        return click_location(**pos)
+    return False
 
 
 def click_location(x, y):
@@ -330,7 +463,7 @@ def save_actions(filename, task, actions):
         f.write(json.dumps(out, indent=2))
 
 
-def run_test(dir, persona):
+def run_test(dir, persona, task_names):
     package, case_id, *steps = dir.split(" ")
 
     output = os.path.join(OUTPUT_FOLDER, persona["name"], dir)
@@ -345,9 +478,9 @@ def run_test(dir, persona):
         launch_app(package)
     except:
         launch_app(package.lower())
-    time.sleep(1)  # Wait for app to launch
+    time.sleep(1.5)  # Wait for app to launch
 
-    task = " ".join(steps)
+    task = task_names[case_id]
     print("Starting task", task)
 
     try:
@@ -362,23 +495,41 @@ def run_test(dir, persona):
         print("Task completed")
 
 
-def test_all_apps(persona):
-    for dir in sorted(os.listdir(DATASET_PATH)):
+def test_all_apps(persona, task_names):
+    for dir in sorted(os.listdir(DATASET_PATH), key=str.casefold):
         print(persona, dir)
         try:
-            run_test(dir, persona)
+            run_test(dir, persona, task_names)
         except Exception:
             print(traceback.format_exc())
             print("Error, skipping")
 
 
+def get_task_names():
+    map = {}
+    with open(TASK_NAMES, "r") as f:
+        for line in f.readlines():
+            id, *rest = line.split(" ")
+            task = " ".join(rest)
+            map[id] = task
+
+    return map
+
+
+def restart():
+    print("Restarting device")
+    subprocess.run(f"adb -e reboot", shell=True)
+    time.sleep(300)
+
 
 if __name__ == "__main__":
     setup()
 
+    task_names = get_task_names()
+
     for persona in PERSONAS:
         print("Using persona", persona)
-        test_all_apps(persona)
+        test_all_apps(persona, task_names)
 
-    # dir, index = pick(os.listdir(DATASET_PATH), "Select test")
-    # run_test(dir)
+    # dir, index = pick(sorted(os.listdir(DATASET_PATH)), "Select test")
+    # run_test(dir, persona=PERSONAS[0])
