@@ -7,8 +7,6 @@ import re
 import time
 from textwrap import dedent
 import os
-import shutil
-from pick import pick
 import traceback
 import re
 import tiktoken
@@ -553,6 +551,3 @@ if __name__ == "__main__":
     for persona in PERSONAS:
         print("Using persona", persona)
         test_all_apps(persona, task_names)
-
-    # dir, index = pick(sorted(os.listdir(DATASET_PATH)), "Select test")
-    # run_test(dir, persona=PERSONAS[0])
