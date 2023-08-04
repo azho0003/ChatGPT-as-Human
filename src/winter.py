@@ -13,10 +13,11 @@ import traceback
 import re
 import tiktoken
 
-DATASET_PATH = r"G:\Shared drives\ChatGPT - Winter Research\Deliverables\Data Collection\Norbert\Datasets"
+DATASET_PATH = r"G:\Shared drives\ChatGPT - Winter Research\Norbert\Datasets"
 TASK_NAMES = os.path.join(DATASET_PATH, "tasknames.csv")
+EMULATOR_PATH = os.path.expandvars(r"%localappdata%\Android\Sdk\emulator")
 
-OUTPUT_FOLDER = "output_winter_2"
+OUTPUT_FOLDER = "output_winter_3"
 
 MAX_TOKENS = 4097
 OUTPUT_TOKENS = 300
@@ -319,10 +320,6 @@ def perform_action(action):
     print("Performing action")
     success = True
     match action["action"]:
-        # case "click-resource":
-        #     click_element(action["resource-id"], view)
-        # case "tap":
-        #     click_location(action["x"], action["y"])
         case "tap":
             click_element_by_id(action["id"])
         case "type":
@@ -379,21 +376,6 @@ def enter_action():
     os.system(f"""adb shell input keyevent 66""")
 
 
-# def click_element(resource, view):
-#     root = view.getroot()
-#     elem = root.find(f'.//node[@resource-id="{resource}"]')
-
-#     if elem is None:
-#         print(f"Element with resource-id '{resource}' not found.")
-#         return False
-
-#     bounds = elem.attrib.get("bounds")
-#     matches = re.findall("\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)[0]
-#     x = (int(matches[0]) + int(matches[2])) / 2
-#     y = (int(matches[1]) + int(matches[3])) / 2
-#     click_location(x, y)
-
-
 def click_element_by_id(id):
     pos = tap_id_position_map.get(id)
     if pos:
@@ -420,29 +402,44 @@ def perform_task(task, folder, persona):
     index = 0
     history = []
 
-    while True:
+    while index < 10:
         time.sleep(3)
         capture_screenshot(folder, index)
         hierarchy_filename = os.path.join(folder, f"{index}.xml")
         download_view_hierarchy(hierarchy_filename)
         stripped_view = get_view_hierarchy(hierarchy_filename)
         response = ask_gpt(history, stripped_view, task, persona)
-        action = get_action(response)
+
+        try:
+            action = get_action(response)
+        except Exception as e:
+            print("Failed to parse action. Trying again.", e)
+            continue
+
         print("Action", action)
         history.append(action)
         save_actions(os.path.join(folder, "actions.json"), task, history)
 
-        index += 1
-        if action["action"] == "stop" or index >= 10:
+        if action["action"] == "stop":
             break
 
-        perform_action(action)
+        try:
+            perform_action(action)
+        except Exception as e:
+            history.pop()
+            print("Failed to perform action. Removing from history and trying again.", e)
+
+        index += 1
 
     time.sleep(3)
 
 
-def launch_app(package):
+def stop_app(package):
     subprocess.run(f"adb shell am force-stop {package}", shell=True)
+
+
+def launch_app(package):
+    stop_app(package)
     time.sleep(0.2)
     start = subprocess.run(f"adb shell monkey -p {package} 1", shell=True, capture_output=True, text=True)
     if "No activities found to run" in start.stdout:
@@ -478,7 +475,7 @@ def run_test(dir, persona, task_names):
         launch_app(package)
     except:
         launch_app(package.lower())
-    time.sleep(1.5)  # Wait for app to launch
+    time.sleep(2)  # Wait for app to launch
 
     task = task_names[case_id]
     print("Starting task", task)
@@ -504,6 +501,9 @@ def test_all_apps(persona, task_names):
             print(traceback.format_exc())
             print("Error, skipping")
 
+        # Avoiding leaving app running the background
+        stop_app(dir.split(" ")[0])
+
 
 def get_task_names():
     map = {}
@@ -516,14 +516,37 @@ def get_task_names():
     return map
 
 
+def wait_for_device_to_boot():
+    is_running = lambda: subprocess.run(
+        "adb shell getprop sys.boot_completed", shell=True, capture_output=True, text=True
+    )
+    while is_running().stdout.strip() != "1":
+        time.sleep(5)
+    time.sleep(10)
+    print("Device booted")
+
+
+def start_emulator():
+    emulators = subprocess.run("emulator -list-avds", shell=True, capture_output=True, text=True, cwd=EMULATOR_PATH)
+    emulator = emulators.stdout.split("\n")[0]
+    subprocess.Popen(
+        f"emulator -avd {emulator} -netdelay none -netspeed full",
+        shell=True,
+        cwd=EMULATOR_PATH,
+        text=True,
+    )
+    wait_for_device_to_boot()
+
+
 def restart():
     print("Restarting device")
     subprocess.run(f"adb -e reboot", shell=True)
-    time.sleep(300)
+    wait_for_device_to_boot()
 
 
 if __name__ == "__main__":
     setup()
+    start_emulator()
 
     task_names = get_task_names()
 
