@@ -10,15 +10,22 @@ import os
 import traceback
 import re
 import tiktoken
+from PIL import Image, ImageDraw, ImageFont
 
 DATASET_PATH = r"G:\Shared drives\ChatGPT - Winter Research\Norbert\Datasets"
 TASK_NAMES = os.path.join(DATASET_PATH, "tasknames.csv")
 EMULATOR_PATH = os.path.expandvars(r"%localappdata%\Android\Sdk\emulator")
 
-OUTPUT_FOLDER = "output_winter_3"
+OUTPUT_FOLDER = "output_winter_6"
 
 MAX_TOKENS = 4097
 OUTPUT_TOKENS = 300
+
+# Screenshot Annotation Constants
+ARROW_SIZE = 20
+FONT_SIZE = 48
+COLOR = "#7FFF7F"  # Light green color
+THICKNESS = 10
 
 PERSONAS = [
     {"name": "teen", "age": "13-19"},
@@ -144,18 +151,25 @@ def get_view_hierarchy(filename):
     global scroll_id_position_map  # TODO: Don't have global
     scroll_id_position_map = {}
 
+    global focused_bounds
+    focused_bounds = {"x1": 0, "y1": 0}  # TODO: Don't have global
+
     for elem in root.iter():
         bounds = elem.attrib.get("bounds")
 
         if bounds:
             matches = re.findall("\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)[0]
-            x = (int(matches[0]) + int(matches[2])) / 2
-            y = (int(matches[1]) + int(matches[3])) / 2
+            x1 = int(matches[0])
+            y1 = int(matches[1])
+            x2 = int(matches[2])
+            y2 = int(matches[3])
+            x = (x1 + x2) / 2
+            y = (y1 + y2) / 2
 
             clickable = elem.attrib.get("clickable")
             if clickable == "true":
                 elem.attrib["id"] = str(tap_index)
-                tap_id_position_map[str(tap_index)] = {"x": x, "y": y}
+                tap_id_position_map[str(tap_index)] = {"x": x, "y": y, "x1": x1, "y1": y1, "x2": x2, "y2": y2}
                 tap_index += 1
 
             scrollable = elem.attrib.get("scrollable")
@@ -163,6 +177,10 @@ def get_view_hierarchy(filename):
                 elem.attrib["scroll-reference"] = str(scroll_index)
                 scroll_id_position_map[str(scroll_index)] = {"x": x, "y": y}
                 scroll_index += 1
+
+            focused = elem.attrib.get("focused")
+            if focused == "true":
+                focused_bounds = {"x1": x1, "y1": y1}
 
         class_val = elem.attrib.get("class")
         if class_val:
@@ -377,7 +395,7 @@ def enter_action():
 def click_element_by_id(id):
     pos = tap_id_position_map.get(id)
     if pos:
-        return click_location(**pos)
+        return click_location(pos["x"], pos["y"])
     return False
 
 
@@ -399,6 +417,7 @@ def get_action(response):
 def perform_task(task, folder, persona):
     index = 0
     history = []
+    actions_file = os.path.join(folder, "actions.json")
 
     while index < 10:
         time.sleep(3)
@@ -415,17 +434,25 @@ def perform_task(task, folder, persona):
             continue
 
         print("Action", action)
-        history.append(action)
-        save_actions(os.path.join(folder, "actions.json"), task, history)
 
         if action["action"] == "stop":
+            history.append(action)
+            save_actions(actions_file, task, history)
             break
 
         try:
             perform_action(action)
         except Exception as e:
-            history.pop()
-            print("Failed to perform action. Removing from history and trying again.", e)
+            print("Failed to perform action. Trying again.", e)
+            continue
+
+        history.append(action)
+        save_actions(actions_file, task, history)
+
+        try:
+            annotate_screenshot(folder, index, action)
+        except Exception as e:
+            print("Failed to annotate screenshot", e)
 
         index += 1
 
@@ -450,6 +477,109 @@ def capture_screenshot(folder, index):
     subprocess.run(f"adb shell screencap -p /sdcard/screenshot.png", shell=True)
     subprocess.run(f'adb pull /sdcard/screenshot.png "{filename}"', shell=True)
     subprocess.run(f"adb shell rm /sdcard/screenshot.png", shell=True)
+
+
+def annotate_screenshot(folder, index, action):
+    print("Annotating screenshot")
+    filename = os.path.join(folder, f"{index}.png")
+    image = Image.open(filename)
+    draw = ImageDraw.Draw(image)
+
+    if action["action"] == "tap" and action["id"] in tap_id_position_map:
+        annotate_tap_action(draw, action, index, folder, image)
+    elif action["action"] == "scroll" and action["scroll-reference"] in scroll_id_position_map:
+        annotate_scroll_action(draw, action, index, folder, image)
+    elif action["action"] in ["type", "enter", "back"]:
+        annotate_text_action(draw, action, index, folder, image)
+    else:
+        print("Invalid action:", action["action"])
+
+
+def annotate_tap_action(draw, action, index, folder, image):
+    bounds = tap_id_position_map[action["id"]]
+    draw.rectangle([bounds["x1"], bounds["y1"], bounds["x2"], bounds["y2"]], outline=COLOR, width=THICKNESS)
+    save_annotated_screenshot(image, index, folder)
+
+
+def annotate_scroll_action(draw, action, index, folder, image):
+    bounds = scroll_id_position_map[action["scroll-reference"]]
+    direction = action["direction"]
+    start_point = (bounds["x"], bounds["y"])
+    end_point = calculate_end_point(start_point, direction)
+
+    draw.line([start_point, end_point], fill=COLOR, width=THICKNESS)
+    draw_arrow(draw, end_point, direction)
+    save_annotated_screenshot(image, index, folder)
+
+
+def annotate_text_action(draw, action, index, folder, image):
+    text = get_annotation_symbol(action)
+
+    if action["action"] in ["enter", "back"]:
+        # Use font that support the required unicode characters
+        font = ImageFont.truetype("cambria.ttc", FONT_SIZE * 3)
+    else:
+        font = ImageFont.truetype("arial.ttf", FONT_SIZE)
+
+    draw.text((focused_bounds["x1"], focused_bounds["y1"]), text, fill=COLOR, font=font)
+    save_annotated_screenshot(image, index, folder)
+
+
+def calculate_end_point(start_point, direction):
+    line_length = 300
+    if direction == "up":
+        return (start_point[0], start_point[1] - line_length)
+    elif direction == "down":
+        return (start_point[0], start_point[1] + line_length)
+    elif direction == "left":
+        return (start_point[0] - line_length, start_point[1])
+    elif direction == "right":
+        return (start_point[0] + line_length, start_point[1])
+
+
+def draw_arrow(draw, end_point, direction):
+    arrow_points = []
+    if direction == "up":
+        arrow_points = [
+            (end_point[0] - ARROW_SIZE, end_point[1] + ARROW_SIZE),
+            (end_point[0] + ARROW_SIZE, end_point[1] + ARROW_SIZE),
+            end_point,
+        ]
+    elif direction == "down":
+        arrow_points = [
+            (end_point[0] - ARROW_SIZE, end_point[1] - ARROW_SIZE),
+            (end_point[0] + ARROW_SIZE, end_point[1] - ARROW_SIZE),
+            end_point,
+        ]
+    elif direction == "left":
+        arrow_points = [
+            (end_point[0] + ARROW_SIZE, end_point[1] - ARROW_SIZE),
+            (end_point[0] + ARROW_SIZE, end_point[1] + ARROW_SIZE),
+            end_point,
+        ]
+    elif direction == "right":
+        arrow_points = [
+            (end_point[0] - ARROW_SIZE, end_point[1] - ARROW_SIZE),
+            (end_point[0] - ARROW_SIZE, end_point[1] + ARROW_SIZE),
+            end_point,
+        ]
+
+    draw.polygon(arrow_points, fill=COLOR)
+
+
+def get_annotation_symbol(action):
+    symbols = {
+        "type": action.get("text", ""),
+        "enter": "\u23CE",  # Unicode for Enter symbol
+        "back": "\u21A9",  # Unicode for Back symbol
+    }
+    return symbols.get(action["action"], "")
+
+
+def save_annotated_screenshot(image, index, folder):
+    annotated_filename = os.path.join(folder, f"{index}_annotated.png")
+    image.save(annotated_filename)
+    print("Annotated screenshot saved as", annotated_filename)
 
 
 def save_actions(filename, task, actions):
