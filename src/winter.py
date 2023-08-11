@@ -16,7 +16,7 @@ DATASET_PATH = r"G:\Shared drives\ChatGPT - Winter Research\Norbert\Datasets"
 TASK_NAMES = os.path.join(DATASET_PATH, "tasknames.csv")
 EMULATOR_PATH = os.path.expandvars(r"%localappdata%\Android\Sdk\emulator")
 
-OUTPUT_FOLDER = "output_winter_6"
+OUTPUT_FOLDER = "output_winter_5"
 
 MAX_TOKENS = 4097
 OUTPUT_TOKENS = 300
@@ -334,7 +334,6 @@ def get_chat_completion(**kwargs):
 
 def perform_action(action):
     print("Performing action")
-    success = True
     match action["action"]:
         case "tap":
             click_element_by_id(action["id"])
@@ -347,20 +346,18 @@ def perform_action(action):
         case "enter":
             enter_action()
         case _:
-            success = False
-
-    return success
+            raise ValueError("Unknown action")
 
 
 def input_text(text):
     text = text.replace(" ", "%s")
-    os.system(f"""adb shell input text \"{text}\"""")
+    os.system(f'adb shell input text "{text}"')
 
 
 def scroll(scroll_id, direction):
     if direction not in {"up", "down", "left", "right"}:
         print(f"Invalid scroll direction: {direction}")
-        return False
+        raise ValueError("Invalid scroll direction")
 
     pos = scroll_id_position_map[scroll_id]
     x = pos["x"]
@@ -381,7 +378,6 @@ def scroll(scroll_id, direction):
     }
 
     os.system(f"adb shell input swipe {x} {y} {x+dx[direction]} {y+dy[direction]} 100")
-    return True
 
 
 def back_action():
@@ -389,14 +385,12 @@ def back_action():
 
 
 def enter_action():
-    os.system(f"""adb shell input keyevent 66""")
+    os.system("adb shell input keyevent 66")
 
 
 def click_element_by_id(id):
-    pos = tap_id_position_map.get(id)
-    if pos:
-        return click_location(pos["x"], pos["y"])
-    return False
+    pos = tap_id_position_map[id]
+    click_location(pos["x"], pos["y"])
 
 
 def click_location(x, y):
@@ -650,7 +644,7 @@ def wait_for_device_to_boot():
     )
     while is_running().stdout.strip() != "1":
         time.sleep(5)
-    time.sleep(10)
+    time.sleep(30)
     print("Device booted")
 
 
