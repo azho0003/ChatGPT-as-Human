@@ -23,9 +23,11 @@ OUTPUT_TOKENS = 300
 
 # Screenshot Annotation Constants
 ARROW_SIZE = 20
-FONT_SIZE = 48
+FONT_SIZE = 60
 COLOR = "#7FFF7F"  # Light green color
 THICKNESS = 10
+TEXT_FILL = "#FF0000"  # Red
+OUTLINE_WIDTH = 2  # Adjust this value for thicker or thinner outline
 
 PERSONAS = [
     {"name": "teen", "age": "13-19"},
@@ -203,7 +205,7 @@ def get_view_hierarchy(filename):
                 elem.attrib.pop(attrib)
 
         for key, value in elem.attrib.copy().items():
-            if not value or key in remove_attribs:  # or value == "false"
+            if not value or key in remove_attribs:
                 elem.attrib.pop(key)
 
     # Remove unnecessary elements
@@ -515,7 +517,13 @@ def annotate_text_action(draw, action, index, folder, image):
     else:
         font = ImageFont.truetype("arial.ttf", FONT_SIZE)
 
-    draw.text((focused_bounds["x1"], focused_bounds["y1"]), text, fill=COLOR, font=font)
+    x = focused_bounds["x1"]
+    y = focused_bounds["y1"]
+    for dx in range(-OUTLINE_WIDTH, OUTLINE_WIDTH + 1):
+        for dy in range(-OUTLINE_WIDTH, OUTLINE_WIDTH + 1):
+            draw.text((x + dx, y + dy), text, font=font, fill=COLOR)
+    draw.text((x, y), text, font=font, fill=TEXT_FILL)
+
     save_annotated_screenshot(image, index, folder)
 
 
