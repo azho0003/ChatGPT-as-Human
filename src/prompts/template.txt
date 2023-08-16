@@ -1,0 +1,11 @@
+###
+Goal:
+{0}
+
+Previous Actions:
+{1}
+
+Hierarchy:
+{2}
+
+Next Action:

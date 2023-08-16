@@ -2,6 +2,7 @@
 .idea
 *.xml
 *.png
+*.pyc
 
 temp/
 output*
