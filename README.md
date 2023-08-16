@@ -1,8 +1,3 @@
 # ChatGPT-as-Human
 
-Instructions
-Open Android emulator, then run
-
-```
-python src/main.py
-```
+Run `python src/main.py`
