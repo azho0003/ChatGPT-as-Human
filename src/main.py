@@ -6,38 +6,92 @@ import json
 import re
 import time
 from textwrap import dedent
-from pygments import highlight, lexers, formatters
-from colorama import Fore, Back, Style
 import os
-import shutil
-from collections import Counter
-from pick import pick
-import csv
+import traceback
+import re
+import tiktoken
 
-OUTPUT_FOLDER = "output"
-TEMP_FOLDER = "temp"
+from annotate import annotate_screenshot
 
-STRIPPED_FILENAME = os.path.join(TEMP_FOLDER, "window_dump_stripped.json")
-PREVIOUS_STRIPPED_FILENAME = os.path.join(TEMP_FOLDER, "window_dump_previous_stripped.json")
+DATASET_PATH = r"G:\Shared drives\ChatGPT - Winter Research\Norbert\Datasets"
+TASK_NAMES = os.path.join(DATASET_PATH, "tasknames.csv")
+EMULATOR_PATH = os.path.expandvars(r"%localappdata%\Android\Sdk\emulator")
 
-clickable_elements = []
+OUTPUT_FOLDER = "output_winter_5"
 
+MAX_TOKENS = 4097
+OUTPUT_TOKENS = 300
 
-def select_persona():
-    personas = {}
-    with open("src/personas.csv") as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            personas[
-                row["Name"]
-            ] = f"I want you to act as a {row['Age']} year old {row['Gender']} {row['Ethnicity']}. You work as a {row['Job']} and {row['Traits']}."
+PERSONAS = [
+    {"name": "teen", "age": "13-19"},
+    {"name": "young adult", "age": "20-35"},
+    {"name": "middle aged adult", "age": "36-55"},
+    {"name": "older adult", "age": "56-75"},
+]
 
-    options = list(personas.keys())
-    persona_name, index = pick(options, "Select persona")
-    persona_prompt = personas[persona_name]
-    print("Selected persona:", persona_name)
+ROLE = dedent(
+    """
+    I want you to act as a {0} that is between {1} years old. You will be using an Android app trying to achieve a specified goal.
+    You will be provided the xml view hierarchy of the Android app being tested.
+    You will respond with the best action that works towards the goal. This may take multiple actions to achieve.
 
-    return persona_name.replace(" ", "_"), persona_prompt
+    The action must be a JSON object. The valid actions are listed below, with the explanation of any property placed in angle brackets.
+    {{"action": "tap", "id": <The id of the element to tap>, "reason": <An explanation of how this action works towards the goal>}}
+    {{"action": "type", "text": <The text to type into the focused element>, "reason": <An explanation of how this action works towards the goal>}}
+    {{"action": "scroll", "scroll-reference": <The scroll reference of the element to scroll>, "direction": <The direction to scroll, can be up/down/left/right>, "reason": <An explanation of how this action works towards the goal>}}
+    {{"action": "back", "reason": <An explanation of how this action works towards the goal>}}
+    {{"action": "enter", "reason": <An explanation of how this action works towards the goal>}}
+    {{"action": "stop", "reason": <Why the testing should be stopped, this could be if the goal has been achieved>}}
+
+    Do not "scroll" more than 3 times in a row.
+    Once the goal is achieved, you will respond with a "stop" action.
+    If there is a sign up screen, skip it or close it.
+    If the hierarchy does not show a related element, open the menu, settings or navigation drawer.
+    This is an example of an input and output:
+
+    ###
+    Goal:
+    View Top Stories
+
+    Previous Actions:
+    None
+
+    Hierarchy:
+    <hierarchy><node text="Top Stories" id="4" /></hierarchy>
+
+    Next Action:
+    {{"action": "tap", "id": "4", "reason": "By tapping on the top stories element, the top stories become visible which is the goal"}}
+
+    ###
+    Goal:
+    View Top Stories
+
+    Previous Actions:
+    {{"action": "tap", "id": "4", "reason": "By tapping on the top stories element, the top stories become visible which is the goal"}}
+
+    Hierarchy:
+    <hierarchy><node text="Top Story: New battery innovation" id="7" /></hierarchy>
+
+    Next Action:
+    {{"action": "stop", "reason": "The top story, 'New battery innovation' is visible. This means the goal has been achieved and the testing can be stopped"}}
+    """
+)
+
+PROMPT = dedent(
+    """\
+    ###
+    Goal:
+    {0}
+
+    Previous Actions:
+    {1}
+
+    Hierarchy:
+    {2}
+
+    Next Action:
+    """
+)
 
 
 def set_working_directory():
@@ -47,425 +101,468 @@ def set_working_directory():
     os.chdir(root)
 
 
-def detect_text_in_edit_widget(view):
-    root = view.getroot()
-    input_boxes = root.findall(".//node[@class='android.widget.EditText']")
-    status = ""
-
-    if input_boxes:
-        for input_box in input_boxes:
-            resource_id = input_box.get("resource-id")
-            text = input_box.get("text")
-
-            if text:
-                status += f"Input box ({resource_id}) has text: {text}\n"
-            else:
-                status += f"Input box ({resource_id}) is empty.\n"
-    else:
-        status = "No input boxes found."
-    return status.strip()
-
-
-def input_text(text):
-    text = text.replace(" ", "%s")
-    os.system(f"""adb shell input text \"{text}\"""")
-    time.sleep(2)
-
-
-def print_json(json_obj):
-    formatted_json = json.dumps(json_obj, indent=4)
-    colorful_json = highlight(formatted_json, lexers.JsonLexer(), formatters.TerminalFormatter())
-    print(Style.RESET_ALL + colorful_json)
-
-
 def setup():
     set_working_directory()
     config = dotenv.dotenv_values(".env")
     openai.api_key = config["OPENAI_API_KEY"]
 
-    if os.path.exists(TEMP_FOLDER):
-        shutil.rmtree(TEMP_FOLDER)
 
-
-def download_view_hierarchy():
-    if not os.path.exists(TEMP_FOLDER):
-        os.mkdir(TEMP_FOLDER)
-
-    # sleep for 2 secs in case the page is not fully loaded
-    time.sleep(2)
-
-    filename = os.path.join(TEMP_FOLDER, "window_dump.xml")
-    if os.path.exists(filename):
-        os.remove(filename)
-
+def download_view_hierarchy(filename):
+    print("Downloading view hierarchy")
     subprocess.run("adb shell uiautomator dump", shell=True)
-    subprocess.run(f"adb pull /sdcard/window_dump.xml {filename}", shell=True)
-    return filename
+    subprocess.run(f'adb pull /sdcard/window_dump.xml "{filename}"', shell=True)
 
 
-def calculate_view_diff():
-    if os.path.exists(PREVIOUS_STRIPPED_FILENAME):
-        diff_command = subprocess.run(
-            f"git diff --no-index {PREVIOUS_STRIPPED_FILENAME} {STRIPPED_FILENAME}",
-            shell=True,
-            capture_output=True,
-        )
-        return diff_command.stdout.decode("utf-8")
-    else:
-        return ""
-
-
-def traverse_view_hierarchy(node):
-    is_clickable = node.attrib.get("clickable", "").lower() == "true"
-
-    if is_clickable:
-        clickable_elements.append(node.attrib)
-
-    for child in node:
-        traverse_view_hierarchy(child)
-
-
-def strip_view_hierarchy(filename):
+def get_view_hierarchy(filename):
     tree = ET.parse(filename)
     root = tree.getroot()
-    traverse_view_hierarchy(root)
 
-    print("Clickable elements:")
-    final_view = []
-    for item in clickable_elements:
-        if not item.get("NAF"):
-            final_view.append(item)
+    remove_attribs = [
+        "index",
+        "package",
+        "checkable",
+        # "checked",
+        "focusable",
+        # "focused",
+        "password",
+        # "selected",
+        "enabled",
+        "scrollable",
+        "resource-id",
+        "NAF",
+        "bounds",
+        "clickable",
+        "rotation",
+        "long-clickable",
+        "class",
+        "content-desc",
+    ]
 
-    for item in final_view:
-        del item["clickable"]
-        del item["index"]
-        del item["long-clickable"]
-        del item["package"]
-        del item["checkable"]
-        del item["checked"]
-        del item["focused"]
-        del item["focusable"]
-        del item["password"]
-        del item["selected"]
-        del item["enabled"]
-        del item["scrollable"]
+    tap_index = 0
+    tap_id_position_map = {}
 
-        if (not item.get("text")) and (not item.get("content-desc")):
-            del item["text"]
-            del item["content-desc"]
+    scroll_index = 0
+    scroll_id_position_map = {}
 
-    if os.path.exists(PREVIOUS_STRIPPED_FILENAME):
-        os.remove(PREVIOUS_STRIPPED_FILENAME)
+    focused_bounds = {"x1": 0, "y1": 0}
 
-    if os.path.exists(STRIPPED_FILENAME):
-        os.rename(STRIPPED_FILENAME, PREVIOUS_STRIPPED_FILENAME)
+    bounds_map = {"tap": tap_id_position_map, "scroll": scroll_id_position_map, "focus": focused_bounds}
 
-    with open(STRIPPED_FILENAME, "w") as file:
-        file.write(json.dumps(final_view, indent=4))
+    for elem in root.iter():
+        bounds = elem.attrib.get("bounds")
 
-    return tree, final_view
+        if bounds:
+            matches = re.findall("\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)[0]
+            x1 = int(matches[0])
+            y1 = int(matches[1])
+            x2 = int(matches[2])
+            y2 = int(matches[3])
+            x = (x1 + x2) / 2
+            y = (y1 + y2) / 2
+
+            clickable = elem.attrib.get("clickable")
+            if clickable == "true":
+                elem.attrib["id"] = str(tap_index)
+                tap_id_position_map[str(tap_index)] = {"x": x, "y": y, "x1": x1, "y1": y1, "x2": x2, "y2": y2}
+                tap_index += 1
+
+            scrollable = elem.attrib.get("scrollable")
+            if scrollable == "true":
+                elem.attrib["scroll-reference"] = str(scroll_index)
+                scroll_id_position_map[str(scroll_index)] = {"x": x, "y": y}
+                scroll_index += 1
+
+            focused = elem.attrib.get("focused")
+            if focused == "true":
+                focused_bounds = {"x1": x1, "y1": y1}
+
+        class_val = elem.attrib.get("class")
+        if class_val:
+            elem.tag = re.sub("\W+", "", class_val.split(".")[-1])
+
+        content_desc = elem.attrib.get("content-desc")
+        if content_desc:
+            elem.attrib["description"] = content_desc
+
+        resource_id = elem.attrib.get("resource-id")
+        if resource_id:
+            elem.attrib["resource"] = resource_id.split("/")[-1]
+
+        checkable = elem.attrib.get("checkable")
+        if checkable == "false":
+            elem.attrib.pop("checked", None)
+
+        for attrib in ["focused", "selected"]:
+            if elem.attrib.get(attrib) == "false":
+                elem.attrib.pop(attrib)
+
+        for key, value in elem.attrib.copy().items():
+            if not value or key in remove_attribs:
+                elem.attrib.pop(key)
+
+    # Remove unnecessary elements
+    parent_map = {c: p for p in tree.iter() for c in p}
+
+    def clean(root):
+        for elem in root.iter():
+            if len(elem.attrib) == 0:
+                if len(elem) == 1:
+                    parent = parent_map.get(elem)
+                    if parent:
+                        print("Removing elem (1 child)", elem)
+                        for i, child in enumerate(parent):
+                            if child == elem:
+                                parent[i] = elem[0]
+                                return True
+                elif len(elem) == 0:
+                    parent = parent_map.get(elem)
+                    if parent:
+                        print("Removing elem (no child)", elem)
+                        try:
+                            parent.remove(elem)
+                        except ValueError:
+                            print("Failed to remove elem")
+                        return True
+        return False
+
+    i = 0
+    while clean(root) and i < 10:
+        i += 1
+
+    stripped = ET.tostring(root, encoding="utf-8", method="xml").decode("utf-8").replace("\n", "").replace("\r", "")
+
+    # Format only the saved view, not the string representation
+    with open(filename.replace(".xml", ".stripped.xml"), "wb") as f:
+        ET.indent(tree)
+        tree.write(f)
+
+    return stripped, bounds_map
 
 
-def is_valid_action(content, input_boxes_status):
+def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
+    """Return the number of tokens used by a list of messages."""
     try:
-        action = json.loads(content.replace("`", ""))
-        if "action" in action and action["action"] in {"click", "send_keys", "scroll", "enter"}:
-            if action["action"] == "click" and "resource-id" in action:
-                return True
-            elif action["action"] == "send_keys" and "text" in action and input_boxes_status != "No input boxes found.":
-                return True
-            elif action["action"] == "scroll" and "direction" in action:
-                return True
-            elif action["action"] == "back":
-                return True
-            elif action["action"] == "enter":
-                return True
-    except json.JSONDecodeError:
-        pass
+        encoding = tiktoken.encoding_for_model(model)
+    except KeyError:
+        print("Warning: model not found. Using cl100k_base encoding.")
+        encoding = tiktoken.get_encoding("cl100k_base")
+    if model in {
+        "gpt-3.5-turbo-0613",
+        "gpt-3.5-turbo-16k-0613",
+        "gpt-4-0314",
+        "gpt-4-32k-0314",
+        "gpt-4-0613",
+        "gpt-4-32k-0613",
+    }:
+        tokens_per_message = 3
+        tokens_per_name = 1
+    elif model == "gpt-3.5-turbo-0301":
+        tokens_per_message = 4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
+        tokens_per_name = -1  # if there's a name, the role is omitted
+    elif "gpt-3.5-turbo" in model:
+        print("Warning: gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613.")
+        return num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613")
+    elif "gpt-4" in model:
+        print("Warning: gpt-4 may update over time. Returning num tokens assuming gpt-4-0613.")
+        return num_tokens_from_messages(messages, model="gpt-4-0613")
+    else:
+        raise NotImplementedError(
+            f"""num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens."""
+        )
+    num_tokens = 0
+    for message in messages:
+        num_tokens += tokens_per_message
+        for key, value in message.items():
+            num_tokens += len(encoding.encode(value))
+            if key == "name":
+                num_tokens += tokens_per_name
+    num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
+    return num_tokens
 
-    return False
+
+def get_model(messages):
+    tokens = num_tokens_from_messages(messages)
+    if tokens < MAX_TOKENS - OUTPUT_TOKENS:
+        model = "gpt-3.5-turbo"
+    else:
+        print("Using 16k model")
+        model = "gpt-3.5-turbo-16k"
+
+    return model
+
+
+def ask_gpt(history, view, task, persona):
+    formatted_history = "\n".join(json.dumps(h) for h in history) if len(history) > 0 else "None"
+
+    if "scroll-reference" not in view:
+        print("Removing scroll action")
+        role_template = "\n".join(line for line in ROLE.split("\n") if "scroll" not in line)
+    else:
+        role_template = ROLE
+
+    messages = [
+        {"role": "system", "content": role_template.format(persona["name"], persona["age"])},
+        {"role": "user", "content": PROMPT.format(task, formatted_history, view)},
+    ]
+    # print(messages)
+
+    model = get_model(messages)
+
+    print("Getting ChatGPT response")
+    response = get_chat_completion(model=model, messages=messages)
+    # print(response)
+
+    return response
 
 
 def get_chat_completion(**kwargs):
     while True:
         try:
-            time_start = time.time()
-            reply = openai.ChatCompletion.create(**kwargs)
-            time_end = time.time()
-            time_taken = time_end - time_start
-            return [reply, time_taken]
-        except openai.error.RateLimitError:
+            return openai.ChatCompletion.create(**kwargs)
+        except (openai.error.RateLimitError, openai.error.ServiceUnavailableError) as e:
+            print(e)
             # Waiting 1 minute as that is how long it takes the rate limit to reset
             print("Rate limit reached, waiting 1 minute")
             time.sleep(60)
 
 
-def ask_gpt(persona_prompt, view, history, input_boxes_status, view_diff):
-    role = f"""\
-        {persona_prompt}
-        I want you to test an android application based on its view hierarchy. I will provide the list of elements in the view hierarchy and you will respond with a single action to perform. Only respond with the action and do not provide any explanation.Only perform the "enter" action to submit the text if there is a filled text box.The response must be valid JSON. The supported actions are as follows
-        {{"action": "click", "resource-id": "..."}}
-        {{"action": "send_keys", text: "..."}}
-        {{"action": "back"}}
-        {{"action": "enter"}}
-        {{"action": "scroll", "direction": "..."}}
-        """
+def perform_action(action, bounds_map):
+    print("Performing action")
+    match action["action"]:
+        case "tap":
+            click_element_by_id(action["id"], bounds_map)
+        case "type":
+            input_text(action["text"])
+        case "scroll":
+            scroll(action["scroll-reference"], action["direction"], bounds_map)
+        case "back":
+            back_action()
+        case "enter":
+            enter_action()
+        case _:
+            raise ValueError("Unknown action")
 
-    history_str = json.dumps(history, indent=4)
 
-    prompt = f"""\
-        Give me the next action to perform, where the first part of the view hierarchy for the application being tested is
-        ```
-        {view}
-        ```
-        Here is a git diff of the view hierarchy since your last action
-        ```
-        {view_diff}
-        ```
-        Do not perform any action from the following history:
-        ```
-        {history_str}
-        ```
-        """
+def input_text(text):
+    text = text.replace(" ", "%s")
+    os.system(f'adb shell input text "{text}"')
 
-    messages = [
-        {"role": "system", "content": dedent(role)},
-        {"role": "user", "content": "What actions have you performed previously within this application?"},
-        {"role": "assistant", "content": json.dumps(history)},
-        {"role": "assistant", "content": "Input boxes status: " + input_boxes_status},
-        {"role": "user", "content": dedent(prompt)},
-    ]
 
-    while True:
-        print(Fore.GREEN + "Messages")
-        print_json(messages)
-        response_arr = get_chat_completion(model="gpt-3.5-turbo", messages=messages, top_p=0.8)
-        response = response_arr[0]
-        time_taken = response_arr[1]
+def scroll(scroll_id, direction, bounds_map):
+    if direction not in {"up", "down", "left", "right"}:
+        print(f"Invalid scroll direction: {direction}")
+        raise ValueError("Invalid scroll direction")
 
-        content = response["choices"][0]["message"]["content"]
-        print(content)
-        if is_valid_action(content, input_boxes_status):
-            print(Fore.GREEN + "Response")
-            print_json(response)
-            print("Time Taken for Response = " + str(time_taken))
-            return response
-        else:
-            # Add a message to the conversation indicating the format was wrong
-            messages.append(
-                {
-                    "role": "user",
-                    "content": dedent(
-                        f"""\
-                        The response format was incorrect. Please give me another action or keep the same action but provide it in the specified JSON format following the examples
-                        {{"action": "click", "resource-id": "..."}}
-                        {{"action": "send_keys", text: "..."}}
-                        {{"action": "back"}}
-                        {{"action": "enter"}}
-                        {{"action": "scroll","direction": "..."}}
-                        """
-                    ),
-                }
-            )
+    pos = bounds_map["scroll"][scroll_id]
+    x = pos["x"]
+    y = pos["y"]
+
+    dx = {
+        "up": 0,
+        "down": 0,
+        "left": 300,
+        "right": -300,
+    }
+
+    dy = {
+        "up": 300,
+        "down": -300,
+        "left": 0,
+        "right": 0,
+    }
+
+    os.system(f"adb shell input swipe {x} {y} {x+dx[direction]} {y+dy[direction]} 100")
+
+
+def back_action():
+    os.system("adb shell input keyevent 4")
+
+
+def enter_action():
+    os.system("adb shell input keyevent 66")
+
+
+def click_element_by_id(id, bounds_map):
+    pos = bounds_map["tap"][id]
+    click_location(pos["x"], pos["y"])
+
+
+def click_location(x, y):
+    subprocess.run(f"adb shell input tap {x} {y}", shell=True)
 
 
 def get_action(response):
     content = response["choices"][0]["message"]["content"]
     content = content.replace("`", "")
-    return json.loads(content)
+    try:
+        return json.loads(content)
+    except Exception as e:
+        print("Failed to parse action")
+        print(content)
+        raise e
 
 
-def perform_actions(action, view):
-    success = False
+def perform_task(task, folder, persona):
+    index = 0
+    history = []
+    actions_file = os.path.join(folder, "actions.json")
 
-    match action["action"]:
-        case "click":
-            click_element(action["resource-id"], view)
-            success = True
-        case "send_keys":
-            input_text(action["text"])
-            success = True
-        case "scroll":
-            success = scroll(action["direction"])
-        case "back":
-            get_back()
-            success = True
-        case "enter":
-            enter_action()
-            success = True
+    while index < 10:
+        time.sleep(3)
+        capture_screenshot(folder, index)
+        hierarchy_filename = os.path.join(folder, f"{index}.xml")
+        download_view_hierarchy(hierarchy_filename)
+        stripped_view, bounds_map = get_view_hierarchy(hierarchy_filename)
+        response = ask_gpt(history, stripped_view, task, persona)
 
-    return success
+        try:
+            action = get_action(response)
+        except Exception as e:
+            print("Failed to parse action. Trying again.", e)
+            continue
 
+        print("Action", action)
 
-def enter_action():
-    os.system(f"""adb shell input keyevent 66""")
-    os.system(f"""adb shell input keyevent 66""")
-    time.sleep(2)
+        if action["action"] == "stop":
+            history.append(action)
+            save_actions(actions_file, task, history)
+            break
 
+        try:
+            perform_action(action, bounds_map)
+        except Exception as e:
+            print("Failed to perform action. Trying again.", e)
+            continue
 
-def scroll(direction):
-    if direction not in {"up", "down", "left", "right"}:
-        print(f"Invalid scroll direction: {direction}")
-        return False
+        history.append(action)
+        save_actions(actions_file, task, history)
 
-    keyevent_map = {
-        "up": "adb shell input swipe 500 500 500 1500 100",
-        "down": "adb shell input swipe 500 1500 500 500 100",
-        "left": "adb shell input swipe 500 500 1500 500 100",
-        "right": "adb shell input swipe 1500 500 500 500 100",
-    }
+        try:
+            annotate_screenshot(folder, index, action, bounds_map)
+        except Exception as e:
+            print("Failed to annotate screenshot", e)
 
-    keyevent = keyevent_map[direction]
-    os.system(f"{keyevent}")
-    time.sleep(1)
-    return True
+        index += 1
 
-
-def get_back():
-    # back to previous activity
-    os.system("adb shell input keyevent 4")
-    time.sleep(1)
+    time.sleep(3)
 
 
-def click_element(resource, view):
-    root = view.getroot()
-    elem = root.find(f'.//node[@resource-id="{resource}"]')
-
-    if elem is None:
-        print(f"Element with resource-id '{resource}' not found.")
-        return False
-
-    bounds = elem.attrib.get("bounds")
-    matches = re.findall("\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)[0]
-    x = (int(matches[0]) + int(matches[2])) / 2
-    y = (int(matches[1]) + int(matches[3])) / 2
-    subprocess.run(f"adb shell input tap {x} {y}", shell=True)
-    return True
+def stop_app(package):
+    subprocess.run(f"adb shell am force-stop {package}", shell=True)
 
 
-def create_folder(folder_name):
-    if os.path.exists(folder_name):
-        shutil.rmtree(folder_name)
-    os.makedirs(folder_name)
-    return folder_name
+def launch_app(package):
+    stop_app(package)
+    time.sleep(0.2)
+    start = subprocess.run(f"adb shell monkey -p {package} 1", shell=True, capture_output=True, text=True)
+    if "No activities found to run" in start.stdout:
+        raise Exception("Package not installed")
 
 
-def capture_screenshot(filename):
+def capture_screenshot(folder, index):
+    print("Capturing screenshot")
+    filename = os.path.join(folder, f"{index}.png")
     subprocess.run(f"adb shell screencap -p /sdcard/screenshot.png", shell=True)
-    subprocess.run(f"adb pull /sdcard/screenshot.png {filename}", shell=True)
+    subprocess.run(f'adb pull /sdcard/screenshot.png "{filename}"', shell=True)
     subprocess.run(f"adb shell rm /sdcard/screenshot.png", shell=True)
 
 
-def process_app_info(command):
-    result = os.popen(command).read()
-    match = re.search(r"mCurrentFocus=.*?{.*?(\S+)\/(\S+)}", result)
-
-    if match:
-        package_name = match.group(1)
-        activity_name = match.group(2)
-        print(package_name, activity_name)
-        return package_name, activity_name
-    else:
-        raise ValueError("Unable to find package and activity names. Make sure the app is running and in focus.")
+def save_actions(filename, task, actions):
+    with open(filename, "w") as f:
+        out = {"goal": task, "actions": actions}
+        f.write(json.dumps(out, indent=2))
 
 
-def get_current_app_info():
+def run_test(dir, persona, task_names):
+    package, case_id, *steps = dir.split(" ")
+
+    output = os.path.join(OUTPUT_FOLDER, persona["name"], dir)
+    if os.path.exists(output) and len(os.listdir(output)) > 0:
+        print("Task skipped")
+        return
+
+    if not os.path.exists(output):
+        os.makedirs(output)
+
     try:
-        return process_app_info("adb shell dumpsys window displays")
-    except ValueError:
-        return process_app_info("adb shell dumpsys window windows")
+        launch_app(package)
+    except:
+        launch_app(package.lower())
+    time.sleep(2)  # Wait for app to launch
+
+    task = task_names[case_id]
+    print("Starting task", task)
+
+    try:
+        perform_task(task, output, persona)
+    except Exception:
+        error = traceback.format_exc()
+        print(error)
+        with open(os.path.join(output, "error.log"), "w") as f:
+            f.write(error)
+        print("Task failed")
+    else:
+        print("Task completed")
 
 
-def go_to_app_home_screen(package_name, activity_name):
-    os.system(f"adb shell am force-stop {package_name}")
-    os.system(f"adb shell monkey -p {package_name} -c android.intent.category.LAUNCHER 1")
-    time.sleep(2)
+def test_all_apps(persona, task_names):
+    for dir in sorted(os.listdir(DATASET_PATH), key=str.casefold):
+        print(persona, dir)
+        try:
+            run_test(dir, persona, task_names)
+        except Exception:
+            print(traceback.format_exc())
+            print("Error, skipping")
+
+        # Avoiding leaving app running the background
+        stop_app(dir.split(" ")[0])
 
 
-def clickable_elements_to_natural_language(elements):
-    sentences = []
-    for element in elements:
-        if element["class"] == "android.widget.Button":
-            if element["text"]:
-                sentences.append(f"Click the '{element['text']}' button.")
-            else:
-                sentences.append("Click the button.")
-        elif element["class"] == "android.widget.TextView":
-            if element["text"]:
-                sentences.append(f"Click the '{element['text']}' text.")
-            else:
-                sentences.append("Click the text.")
-        elif element["class"] == "android.view.View":
-            if element["text"]:
-                sentences.append(f"Click the '{element['text']}' view.")
-            else:
-                sentences.append("Click the view.")
-    return " ".join(sentences)
+def get_task_names():
+    map = {}
+    with open(TASK_NAMES, "r") as f:
+        for line in f.readlines():
+            id, *rest = line.split(" ")
+            task = " ".join(rest)
+            map[id] = task
+
+    return map
+
+
+def wait_for_device_to_boot():
+    is_running = lambda: subprocess.run(
+        "adb shell getprop sys.boot_completed", shell=True, capture_output=True, text=True
+    )
+    while is_running().stdout.strip() != "1":
+        time.sleep(5)
+    time.sleep(30)
+    print("Device booted")
+
+
+def start_emulator():
+    emulators = subprocess.run("emulator -list-avds", shell=True, capture_output=True, text=True, cwd=EMULATOR_PATH)
+    emulator = emulators.stdout.split("\n")[0]
+    subprocess.Popen(
+        f"emulator -avd {emulator} -netdelay none -netspeed full",
+        shell=True,
+        cwd=EMULATOR_PATH,
+        text=True,
+    )
+    wait_for_device_to_boot()
+
+
+def restart():
+    print("Restarting device")
+    subprocess.run(f"adb -e reboot", shell=True)
+    wait_for_device_to_boot()
 
 
 if __name__ == "__main__":
-
     setup()
-    app_package_name, app_activity_name = get_current_app_info()
+    start_emulator()
 
-    # TODO : Change this rounds number with whatever you want
-    rounds = 1
+    task_names = get_task_names()
 
-    persona_name, persona_prompt = select_persona()
-    page_counter = Counter()
-
-    all_rounds_actions = []
-
-    final_all_rounds_actions = []
-
-    for round_num in range(1, rounds + 1):
-        folder_name = os.path.join(OUTPUT_FOLDER, app_package_name, f"{persona_name}_{round_num}")
-        create_folder(folder_name)
-
-        timer = 0
-        history = []
-
-        round_action = []
-
-        capture_screenshot(os.path.join(folder_name, f"0_initial.png"))
-
-        # TODO : Change this timer number with whatever you want
-        while timer < 5:
-            clickable_elements = []
-            filename = download_view_hierarchy()
-            (view, stripped_view) = strip_view_hierarchy(filename)
-            input_boxes_status = detect_text_in_edit_widget(view)
-            view_diff = calculate_view_diff()
-            response = ask_gpt(persona_prompt, stripped_view, history, input_boxes_status, view_diff)
-            action = get_action(response)
-
-            if action["action"] == "click":
-                page_counter[action["resource-id"]] += 1
-
-            # Perform the action and check if it was successful
-            click_successful = perform_actions(action, view)
-
-            # stop for 2s for screenshot
-            time.sleep(2)
-
-            # If the click is unsuccessful, go back and ask GPT for another action
-            if not click_successful:
-                get_back()
-                continue
-
-            screenshot_filename = os.path.join(folder_name, f"{timer+1}_{action['action']}.png")
-            capture_screenshot(screenshot_filename)
-
-            history.append(action)
-            round_action.append(action)
-            timer += 1
-            time.sleep(2)
-        final_all_rounds_actions.append(round_action)
-        go_to_app_home_screen(app_package_name, app_activity_name)
-
-    # Print the top 5 resource-id the script will click
-    print("\nTop 5 resource_id the script performed actions on:")
-    for resource_id, count in page_counter.most_common(5):
-        print(f"{persona_name}, {resource_id}: {count} times")
-
-    print(f"{persona_name}, {final_all_rounds_actions}")
+    for persona in PERSONAS:
+        print("Using persona", persona)
+        test_all_apps(persona, task_names)
