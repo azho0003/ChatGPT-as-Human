@@ -6,5 +6,5 @@
 
 temp/
 output*
-vis.html
+vis*.html
 dataset.csv

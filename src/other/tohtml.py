@@ -6,7 +6,7 @@ from glob import glob
 import os
 
 ######## ONLY NEED TO MODIFY HERE
-path2GTdir = r"G:\Shared drives\ChatGPT - Winter Research\Deliverables\Data Collection\Norbert\Datasets"
+path2GTdir = r"G:\Shared drives\ChatGPT - Winter Research\Norbert\Datasets"
 path2OutputDir = "output_winter_2"
 ########
 
@@ -48,7 +48,7 @@ for personaFolder in allPersonaFolder:  # [:1]:
         html += f"<tr><td><b>{curr_persona}</b></td>"
         html += f"<td><b>{os.path.basename(useCaseFolder)}</b></td>"
 
-        all_pngs = glob(os.path.join(useCaseFolder, "**.png"))
+        all_pngs = glob(os.path.join(useCaseFolder, "*[!_annotated].png"))
         if len(all_pngs) == 0:
             continue
         all_pngs = list(sorted(all_pngs, key=lambda x: int(os.path.basename(x).split(".")[0])))
@@ -56,8 +56,11 @@ for personaFolder in allPersonaFolder:  # [:1]:
 
         gtFilePath = folder2gtFilePath[os.path.basename(useCaseFolder).lower()]
         print(len(all_pngs))
-        for pngPath in all_pngs:
-            html += f"""<td><img style="width:{WIDTH}px;height:{HEIGHT}px" src="{pngPath}"></td>"""
+        for png_path in all_pngs:
+            annotated_png = png_path.replace(".png", "_annotated.png")
+            if os.path.exists(annotated_png):
+                png_path = annotated_png
+            html += f"""<td><img style="width:{WIDTH}px;height:{HEIGHT}px" src="{png_path}"></td>"""
         if has_error:
             html += f"""<td style="background-color:red;border: 5px solid red;"><img style="width:{WIDTH}px;height:{HEIGHT}px;"></td>"""
 
@@ -72,5 +75,5 @@ html += """
 
 
 # Write the string to file
-with open("vis.html", "w") as file:
+with open(f"vis_{path2OutputDir}.html", "w") as file:
     file.write(html)
