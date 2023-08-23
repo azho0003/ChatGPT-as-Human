@@ -44,6 +44,13 @@ def get_view_hierarchy(filename):
     for elem in root.iter():
         bounds = elem.attrib.get("bounds")
 
+        class_val = elem.attrib.get("class")
+        if class_val:
+            short_class = re.sub("\W+", "", class_val.split(".")[-1])
+            elem.tag = short_class
+        else:
+            short_class = None
+
         if bounds:
             matches = re.findall("\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)[0]
             x1 = int(matches[0])
@@ -53,7 +60,7 @@ def get_view_hierarchy(filename):
             x = (x1 + x2) / 2
             y = (y1 + y2) / 2
 
-            clickable = elem.attrib.get("clickable")
+            clickable = (short_class == "TextView") or elem.attrib.get("clickable")
             if clickable == "true":
                 elem.attrib["id"] = str(tap_index)
                 tap_id_position_map[str(tap_index)] = {"x": x, "y": y, "x1": x1, "y1": y1, "x2": x2, "y2": y2}
@@ -68,10 +75,6 @@ def get_view_hierarchy(filename):
             focused = elem.attrib.get("focused")
             if focused == "true":
                 focused_bounds = {"x1": x1, "y1": y1}
-
-        class_val = elem.attrib.get("class")
-        if class_val:
-            elem.tag = re.sub("\W+", "", class_val.split(".")[-1])
 
         content_desc = elem.attrib.get("content-desc")
         if content_desc:
