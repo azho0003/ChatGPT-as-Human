@@ -77,3 +77,8 @@ def get_action(response):
         print("Failed to parse action")
         print(content)
         raise e
+
+
+def should_stop(response):
+    content = response["choices"][0]["message"]["content"]
+    return content.lower().strip() == "yes"

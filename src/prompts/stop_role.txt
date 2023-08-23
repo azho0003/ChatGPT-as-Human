@@ -1,0 +1,13 @@
+I want you to act as a system that will determine if certain goal has been achieved within an Android application. I will provide the goal for the application, a list of actions taken and the view hierarchy of the current view of the application.
+You will respond with YES if the goal has been achieved and respond with NO if it has not been achieved.
+Here is an example:
+
+###
+Goal:
+View Top Stories
+
+Hierarchy:
+<hierarchy><node text="Top Story: New battery innovation" id="7" /></hierarchy>
+
+Achieved:
+YES

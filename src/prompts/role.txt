@@ -8,7 +8,6 @@ The action must be a JSON object. The valid actions are listed below, with the e
 {{"action": "scroll", "scroll-reference": <The scroll reference of the element to scroll>, "direction": <The direction to scroll, can be up/down/left/right>, "reason": <An explanation of how this action works towards the goal>}}
 {{"action": "back", "reason": <An explanation of how this action works towards the goal>}}
 {{"action": "enter", "reason": <An explanation of how this action works towards the goal>}}
-{{"action": "stop", "reason": <Why the testing should be stopped, this could be if the goal has been achieved>}}
 
 Do not "scroll" more than 3 times in a row.
 Once the goal is achieved, you will respond with a "stop" action.
@@ -28,16 +27,3 @@ Hierarchy:
 
 Next Action:
 {{"action": "tap", "id": "4", "reason": "By tapping on the top stories element, the top stories become visible which is the goal"}}
-
-###
-Goal:
-View Top Stories
-
-Previous Actions:
-{{"action": "tap", "id": "4", "reason": "By tapping on the top stories element, the top stories become visible which is the goal"}}
-
-Hierarchy:
-<hierarchy><node text="Top Story: New battery innovation" id="7" /></hierarchy>
-
-Next Action:
-{{"action": "stop", "reason": "The top story, 'New battery innovation' is visible. This means the goal has been achieved and the testing can be stopped"}}

@@ -61,11 +61,14 @@ def get_model(messages):
     return model
 
 
+def format_history(history):
+    return "\n".join(json.dumps(h) for h in history) if len(history) > 0 else "None"
+
+
 def ask_gpt(history, view, task, persona):
     role = get_prompt("role")
     template = get_prompt("template")
-
-    formatted_history = "\n".join(json.dumps(h) for h in history) if len(history) > 0 else "None"
+    formatted_history = format_history(history)
 
     if "scroll-reference" not in view:
         print("Removing scroll action")
@@ -79,12 +82,9 @@ def ask_gpt(history, view, task, persona):
     ]
     print(messages)
 
-    model = get_model(messages)
-
     print("Getting ChatGPT response")
+    model = get_model(messages)
     response = get_chat_completion(model=model, messages=messages)
-    # print(response)
-
     return response
 
 
@@ -97,3 +97,21 @@ def get_chat_completion(**kwargs):
             # Waiting 1 minute as that is how long it takes the rate limit to reset
             print("Rate limit reached, waiting 1 minute")
             time.sleep(60)
+
+
+def ask_task_finished(history, view, task):
+    role = get_prompt("stop_role")
+    template = get_prompt("stop_template")
+    formatted_history = format_history(history)
+
+    messages = [
+        {"role": "system", "content": role.format()},
+        {"role": "user", "content": template.format(task, formatted_history, view)},
+    ]
+    print(messages)
+
+    print("Asking if goal achieved")
+    model = get_model(messages)
+    response = get_chat_completion(model=model, messages=messages)
+    print(response)
+    return response

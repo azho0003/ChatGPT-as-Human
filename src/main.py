@@ -8,8 +8,8 @@ import traceback
 
 
 from annotate import annotate_screenshot
-from model import ask_gpt
-from action import get_action, perform_action
+from model import ask_gpt, ask_task_finished
+from action import get_action, perform_action, should_stop
 from emulator import start_emulator, capture_screenshot, stop_app, launch_app
 from hierarchy import download_view_hierarchy, get_view_hierarchy
 
@@ -52,20 +52,22 @@ def perform_task(task, folder, persona):
         hierarchy_filename = os.path.join(folder, f"{index}.xml")
         download_view_hierarchy(hierarchy_filename)
         stripped_view, bounds_map = get_view_hierarchy(hierarchy_filename)
+
+        stop = should_stop(ask_task_finished(history, stripped_view, task))
+        if stop:
+            print("Stopping")
+            history.append({"action": "stop"})
+            save_actions(actions_file, task, history)
+            break
+
         response = ask_gpt(history, stripped_view, task, persona)
 
         try:
             action = get_action(response)
+            print("Action", action)
         except Exception as e:
             print("Failed to parse action. Trying again.", e)
             continue
-
-        print("Action", action)
-
-        if action["action"] == "stop":
-            history.append(action)
-            save_actions(actions_file, task, history)
-            break
 
         try:
             perform_action(action, bounds_map)
