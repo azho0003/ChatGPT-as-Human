@@ -4,10 +4,11 @@ On vis.html, each row would be the GPT's interaction trace, and the final image 
 
 from glob import glob
 import os
+import csv
 
 ######## ONLY NEED TO MODIFY HERE
 path2GTdir = r"G:\Shared drives\ChatGPT - Winter Research\Norbert\Datasets"
-path2OutputDir = "output_winter_2"
+path2OutputDir = "output_gpt4_1"
 ########
 
 html = """
@@ -30,11 +31,17 @@ for gtFolder in allGTFolders:
     if len(all_pngs) > 0:
         curr_file = all_pngs[-1]
         print(all_pngs, curr_file)
-        folder2gtFilePath[os.path.basename(gtFolder).lower()] = curr_file
+        folder2gtFilePath[os.path.basename(gtFolder).lower().split(" ")[0]] = curr_file
 
 # iterate each persona
 allPersonaFolder = glob(os.path.join(path2OutputDir, "**"))
 allPersonaFolder.sort()
+
+tests = {}
+with open("tests.csv", newline="") as csvfile:
+    reader = csv.DictReader(csvfile)
+    for row in reader:
+        tests[row["Package"]] = row["Task"]
 
 WIDTH = 200
 HEIGHT = 400
@@ -46,7 +53,9 @@ for personaFolder in allPersonaFolder:  # [:1]:
     allUseCaseFolder.sort(key=str.casefold)
     for useCaseFolder in allUseCaseFolder:
         html += f"<tr><td><b>{curr_persona}</b></td>"
-        html += f"<td><b>{os.path.basename(useCaseFolder)}</b></td>"
+        package = os.path.basename(useCaseFolder)
+        html += f"<td><b>{package}</b></td>"
+        html += f"<td><b>{tests[package]}</b></td>"
 
         all_pngs = glob(os.path.join(useCaseFolder, "*[!_annotated].png"))
         if len(all_pngs) == 0:
