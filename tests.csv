@@ -1,0 +1,46 @@
+Package,Use Case ID,Task
+com.google.android.youtube,bbc566a2-e1b5-41f9-8600-03804270d8a5,turn on subtitles
+bbc.mobile.news.ww,0704f664-2106-45a5-ae3d-04cf624b2242,Go to the popular tab and click on the second most read article
+com.duolingo,327acb44-a49b-45cd-85dd-1d6096981715,Disable Sound effects
+com.reddit.frontpage,b6362c49-f69f-4a7f-b213-93a39ca0b56e,View inbox
+com.google.android.apps.maps,94b7cbc5-2026-436e-a6a3-defdf2ee360d,turn on wifi only
+com.google.android.calculator,a37bd4b0-a529-464e-b60a-e6ecc3621c0d,Divide 86 by 3
+com.google.earth,08bae79d-a8bd-4ece-8a8d-97d346b73f39,Open map style
+com.google.android.apps.translate,03e5912e-48c3-44e2-b532-bfb7c8e41066,Set Translate From language to Spanish
+com.imdb.mobile,77e0abc9-b0e0-4337-9510-ffba054832e3,go to settings and turn on show titles in original language
+com.booking,21d8b78e-6130-4ec2-a9ae-15a3890abb0c,go to settings and change the currency preference to CAD
+com.accuweather.android,ecee4e32-5632-47ef-9a80-87655ffac52c,Open settings and change temperature unit to C
+com.joom,4e101a55-5411-445d-8318-2f6ace7a04c2,view my notifications
+com.kayak.android,9f3fae3d-62b7-4d1a-afa1-e2913ca89ea8,go to price alerts under settings
+com.mapswithme.maps.pro,0c3cd532-4224-4da4-bd46-5828b337c7bb,turn on subway map layer
+com.miui.calculator,04a5b4e3-0631-446e-840d-83bf4118b0bb,Divide 86 by 3
+com.opera.app.news,b37f79c9-1b78-4ff6-86ad-83c06c7b9222,view technology headlines
+com.scannerradio,02da16a1-1291-4508-a78b-7346a55b5cac,browse scanners by genre
+com.sec.android.app.sbrowser,8e432c1e-d56c-46b6-b053-0c1da32c2b29,Change Default Search engine to Yahoo
+com.sony.nfx.app.sfrc,9109ba8f-143b-45a7-8c15-ced9223cb1ee,view technology headlines
+com.springwalk.mediaconverter,5fed8c47-c72d-4b23-b107-caf828db18c1,Open Settings
+com.starbucks.mobilecard,1e157abc-e980-45bc-af1b-5af73d3cdbbe,view nearby starbucks stores
+Com.teacapps.barcodescanner,79556075-82ef-44b1-b913-958636015a01,Click history and select export TXT
+com.thetrainline,ea76c5d8-1839-4463-9fc7-0b77e5b3800e,Check my messages
+com.tranzmate,7f936b5d-0c5d-4a99-9a3e-4ac6c93a2cdc,go to settings
+com.tripadvisor.tripadvisor,7ee8e412-f6c1-4f1c-9d09-fbe9a721194a,search for attractions near me
+com.trivago,e5cd55b4-c359-4017-b0dc-e8054f85b7c9,go to settings and change the currency preference to CAD
+com.urbandroid.sleep,47edc5cd-1bbe-4ca4-a149-a8e5f2ce7912,Open Alarms tab and set alarm for 600 AM
+com.waze,3f829e18-04ae-4ab2-9890-c5345a0a6458,go to settings
+aplicacion.tiempo,23b56165-cf6e-462d-92c2-23e7d96d70f0,Show me the temperature forecast over New Orleans Louisiana
+com.amazon.mShop.android.shopping,5a64b39f-00d7-4452-9588-ebcddf129940,search for book lights
+com.avast.android.mobilesecurity,be6910f9-261d-4924-a6e2-5e5733a825b4,Open Wi-Fi Speed
+com.buzzfeed.tasty,c032a511-ffb5-4a6e-821e-ab918798d017,Go to my recipes and click on settings
+Com.cnn.mobile.android.phone,40e56c50-323e-4430-9cb1-9bac646392d7,Go to account preferences and enable 'This is CNN'
+com.contextlogic.wish,a5744b26-4d43-488d-8c2b-2db5be36635e,go to categories
+com.dominospizza,4961f129-081f-4d1e-9ca4-131462570ee2,go to settings and turn off special offers and deals
+com.genius.android,3be77778-f1be-4461-b946-4a856d14171a,Search for 'Techno'
+com.google.android.apps.magazines,bcf25aef-98c7-4cef-a224-b79f2768f060,view technology headlines
+ru.zdevs.zarchiver,b335edba-16b7-426f-b713-26079ef67e38,Search for storage
+org.videolan.vlc,0ff03a24-6348-4f4c-921c-c92c4ca37332,"From more, go to settings and disable auto rescan"
+org.mozilla.firefox,f4efd644-3714-4b5d-8980-82b0a2757a6e,view my history
+org.khanacademy.android,4eecf352-5744-4f6b-b269-f0959cae65ad,Go to language and region and set it to Canada (Alberta)
+gov.nasa,6977c5c6-ba57-48ab-b78d-594a992cd665,go to missions and click on apollo
+fm.castbox.audiobook.radio.podcast,1a3d148e-7dc2-436c-a016-1f1c981ee634,go to my profile
+com.zzkko,62d4cf6a-beb5-44b0-aed3-868b7e33b6ce,view my shopping bag
+com.zombodroid.MemeGenerator,48a75af5-2fe8-4b95-8a36-b4e1872857c4,select list layout for all memes

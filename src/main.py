@@ -5,6 +5,7 @@ import json
 import time
 import os
 import traceback
+import csv
 
 
 from annotate import annotate_screenshot
@@ -13,11 +14,9 @@ from action import get_action, perform_action
 from emulator import start_emulator, capture_screenshot, stop_app, launch_app
 from hierarchy import download_view_hierarchy, get_view_hierarchy
 
-DATASET_PATH = r"G:\Shared drives\ChatGPT - Winter Research\Norbert\Datasets"
-TASK_NAMES = os.path.join(DATASET_PATH, "tasknames.csv")
 EMULATOR_PATH = os.path.expandvars(r"%localappdata%\Android\Sdk\emulator")
 
-OUTPUT_FOLDER = "output_winter_6"
+OUTPUT_FOLDER = "output_gpt4_1"
 
 
 PERSONAS = [
@@ -92,10 +91,8 @@ def save_actions(filename, task, actions):
         f.write(json.dumps(out, indent=2))
 
 
-def run_test(dir, persona, task_names):
-    package, case_id, *steps = dir.split(" ")
-
-    output = os.path.join(OUTPUT_FOLDER, persona["name"], dir)
+def run_test(package, task, persona):
+    output = os.path.join(OUTPUT_FOLDER, persona["name"], package)
     if os.path.exists(output) and len(os.listdir(output)) > 0:
         print("Task skipped")
         return
@@ -109,7 +106,6 @@ def run_test(dir, persona, task_names):
         launch_app(package.lower())
     time.sleep(2)  # Wait for app to launch
 
-    task = task_names[case_id]
     print("Starting task", task)
 
     try:
@@ -124,36 +120,31 @@ def run_test(dir, persona, task_names):
         print("Task completed")
 
 
-def test_all_apps(persona, task_names):
-    for dir in sorted(os.listdir(DATASET_PATH), key=str.casefold):
-        print(persona, dir)
+def test_all_apps(persona):
+    tests = []
+    with open("tests.csv", newline="") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            tests.append(row)
+    tests.sort(key=lambda test: test["Package"].lower())
+
+    for test in tests:
+        package = test["Package"]
+        print(persona, package)
         try:
-            run_test(dir, persona, task_names)
+            run_test(package, test["Task"], persona)
         except Exception:
             print(traceback.format_exc())
             print("Error, skipping")
 
         # Avoiding leaving app running the background
-        stop_app(dir.split(" ")[0])
-
-
-def get_task_names():
-    map = {}
-    with open(TASK_NAMES, "r") as f:
-        for line in f.readlines():
-            id, *rest = line.split(" ")
-            task = " ".join(rest)
-            map[id] = task
-
-    return map
+        stop_app(package)
 
 
 if __name__ == "__main__":
     setup()
     start_emulator(EMULATOR_PATH)
 
-    task_names = get_task_names()
-
     for persona in PERSONAS:
         print("Using persona", persona)
-        test_all_apps(persona, task_names)
+        test_all_apps(persona)
