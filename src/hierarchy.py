@@ -61,7 +61,7 @@ def get_view_hierarchy(filename):
             y = (y1 + y2) / 2
 
             clickable = (short_class == "TextView") or elem.attrib.get("clickable")
-            if clickable == "true":
+            if clickable or clickable == "true":
                 elem.attrib["id"] = str(tap_index)
                 tap_id_position_map[str(tap_index)] = {"x": x, "y": y, "x1": x1, "y1": y1, "x2": x2, "y2": y2}
                 tap_index += 1
