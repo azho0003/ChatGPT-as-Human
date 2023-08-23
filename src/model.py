@@ -9,7 +9,6 @@ USE_GPT_4 = True
 GPT_35_MAX_TOKENS = 4097
 GPT_4_MAX_TOKENS = 8192
 OUTPUT_TOKENS = 300
-OUTPUT_TOKENS = 300
 
 
 def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
