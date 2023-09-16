@@ -95,41 +95,7 @@ def ask_gpt(history, view, task, persona):
     response = get_chat_completion(model=model, messages=messages)
     # print(response)
 
-    # Ask the model to generate three actions
-    responses = get_chat_completion(model=model, messages=messages, num_responses=3)
-    
-    # Pass the responses along with the context for further evaluation
-    best_action = get_best_action(responses, task, persona)
-
-    return best_action[0]
-    #return response
-
-def get_best_action(responses, task, persona):
-    actions = [response['choices'][0]['message']['content'] for response in responses]
-    formatted_actions = '\n'.join(actions)
-    
-    # Add context of the task and persona
-    prompt = f"{formatted_actions}\n\nTask: {task}\nPersona: {persona['name']}\n\nExplain your choice:"
-
-    try:
-        response = get_chat_completion(
-            model="gpt-3.5-turbo",
-            prompt=prompt,
-            max_tokens=100,
-            n=1,
-            stop=["\n"]
-        )
-        
-        chosen_action = response.choices[0].message.content.strip()
-        
-        # Extracting the explanation from the response
-        explanation = response.choices[0].message.role
-        
-        return chosen_action, explanation
-    except (openai.error.RateLimitError, openai.error.ServiceUnavailableError) as e:
-        print(e)
-        # Handle the error as needed
-
+    return response
 
 
 def get_chat_completion(**kwargs):
