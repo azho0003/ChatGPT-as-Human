@@ -16,16 +16,8 @@ from hierarchy import download_view_hierarchy, get_view_hierarchy
 
 EMULATOR_PATH = os.path.expandvars(r"%localappdata%\Android\Sdk\emulator")
 
-OUTPUT_FOLDER = "output_gpt4_1"
-
-
-PERSONAS = [
-    {"name": "teen", "age": "13-19"},
-    {"name": "young adult", "age": "20-35"},
-    {"name": "middle aged adult", "age": "36-55"},
-    {"name": "older adult", "age": "56-75"},
-]
-
+OUTPUT_FOLDER = "testingFaileCaseAsExpert"
+STEP_USED = 0
 
 def set_working_directory():
     abspath = os.path.abspath(__file__)
@@ -40,18 +32,19 @@ def setup():
     openai.api_key = config["OPENAI_API_KEY"]
 
 
-def perform_task(task, folder, persona):
-    index = 0
+def perform_task(task, folder):
+    global STEP_USED
+    index = 1
     history = []
     actions_file = os.path.join(folder, "actions.json")
 
-    while index < 10:
+    while index <= 15:
         time.sleep(3)
         capture_screenshot(folder, index)
         hierarchy_filename = os.path.join(folder, f"{index}.xml")
         download_view_hierarchy(hierarchy_filename)
         stripped_view, bounds_map = get_view_hierarchy(hierarchy_filename)
-        response = ask_gpt(history, stripped_view, task, persona)
+        response = ask_gpt(history, stripped_view, task)
 
         try:
             action = get_action(response)
@@ -81,8 +74,10 @@ def perform_task(task, folder, persona):
             print("Failed to annotate screenshot", e)
 
         index += 1
+        STEP_USED += 1
 
     time.sleep(3)
+
 
 
 def save_actions(filename, task, actions):
@@ -91,8 +86,11 @@ def save_actions(filename, task, actions):
         f.write(json.dumps(out, indent=2))
 
 
-def run_test(package, task, persona):
-    output = os.path.join(OUTPUT_FOLDER, persona["name"], package)
+def run_test(package, task):
+    global STEP_USED
+    STEP_USED = 0
+
+    output = os.path.join(OUTPUT_FOLDER, package)
     if os.path.exists(output) and len(os.listdir(output)) > 0:
         print("Task skipped")
         return
@@ -109,20 +107,26 @@ def run_test(package, task, persona):
     print("Starting task", task)
 
     try:
-        perform_task(task, output, persona)
+        start_time = time.time()
+        perform_task(task, output)
+
     except Exception:
+        end_time = time.time()
         error = traceback.format_exc()
         print(error)
         with open(os.path.join(output, "error.log"), "w") as f:
             f.write(error)
         print("Task failed")
     else:
+        end_time = time.time()
         print("Task completed")
 
-
-def test_all_apps(persona):
+    time_used = end_time - start_time - 6 * STEP_USED
+    with open(os.path.join(output, "statistics.txt"), "w") as f:
+        f.write(f" Used time is : {time_used:.3f} seconds \n Used step is : {STEP_USED} ")
+def test_all_apps():
     tests = []
-    with open("tests.csv", newline="") as csvfile:
+    with open("secondTests.csv", newline="") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             tests.append(row)
@@ -130,9 +134,9 @@ def test_all_apps(persona):
 
     for test in tests:
         package = test["Package"]
-        print(persona, package)
+        print(package)
         try:
-            run_test(package, test["Task"], persona)
+            run_test(package, test["Task"])
         except Exception:
             print(traceback.format_exc())
             print("Error, skipping")
@@ -143,8 +147,4 @@ def test_all_apps(persona):
 
 if __name__ == "__main__":
     setup()
-    start_emulator(EMULATOR_PATH)
-
-    for persona in PERSONAS:
-        print("Using persona", persona)
-        test_all_apps(persona)
+    test_all_apps()

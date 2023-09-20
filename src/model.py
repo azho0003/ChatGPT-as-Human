@@ -71,7 +71,7 @@ def get_model(messages):
     return model
 
 
-def ask_gpt(history, view, task, persona):
+def ask_gpt(history, view, task):
     role = get_prompt("role")
     template = get_prompt("template")
 
@@ -84,10 +84,10 @@ def ask_gpt(history, view, task, persona):
         role_template = role
 
     messages = [
-        {"role": "system", "content": role_template.format(persona["name"], persona["age"])},
+        {"role": "system", "content": role_template.format()},
         {"role": "user", "content": template.format(task, formatted_history, view)},
     ]
-    print(messages)
+    # print(messages)
 
     model = get_model(messages)
 

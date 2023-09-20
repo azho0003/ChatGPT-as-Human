@@ -1,5 +1,4 @@
 Package,Use Case ID,Task
-com.google.android.youtube,bbc566a2-e1b5-41f9-8600-03804270d8a5,turn on subtitles
 bbc.mobile.news.ww,0704f664-2106-45a5-ae3d-04cf624b2242,Go to the popular tab and click on the second most read article
 com.duolingo,327acb44-a49b-45cd-85dd-1d6096981715,Disable Sound effects
 com.reddit.frontpage,b6362c49-f69f-4a7f-b213-93a39ca0b56e,View inbox
@@ -23,11 +22,9 @@ com.starbucks.mobilecard,1e157abc-e980-45bc-af1b-5af73d3cdbbe,view nearby starbu
 Com.teacapps.barcodescanner,79556075-82ef-44b1-b913-958636015a01,Click history and select export TXT
 com.thetrainline,ea76c5d8-1839-4463-9fc7-0b77e5b3800e,Check my messages
 com.tranzmate,7f936b5d-0c5d-4a99-9a3e-4ac6c93a2cdc,go to settings
-com.tripadvisor.tripadvisor,7ee8e412-f6c1-4f1c-9d09-fbe9a721194a,search for attractions near me
 com.trivago,e5cd55b4-c359-4017-b0dc-e8054f85b7c9,go to settings and change the currency preference to CAD
 com.urbandroid.sleep,47edc5cd-1bbe-4ca4-a149-a8e5f2ce7912,Open Alarms tab and set alarm for 600 AM
 com.waze,3f829e18-04ae-4ab2-9890-c5345a0a6458,go to settings
-aplicacion.tiempo,23b56165-cf6e-462d-92c2-23e7d96d70f0,Show me the temperature forecast over New Orleans Louisiana
 com.amazon.mShop.android.shopping,5a64b39f-00d7-4452-9588-ebcddf129940,search for book lights
 com.avast.android.mobilesecurity,be6910f9-261d-4924-a6e2-5e5733a825b4,Open Wi-Fi Speed
 com.buzzfeed.tasty,c032a511-ffb5-4a6e-821e-ab918798d017,Go to my recipes and click on settings
@@ -44,3 +41,18 @@ gov.nasa,6977c5c6-ba57-48ab-b78d-594a992cd665,go to missions and click on apollo
 fm.castbox.audiobook.radio.podcast,1a3d148e-7dc2-436c-a016-1f1c981ee634,go to my profile
 com.zzkko,62d4cf6a-beb5-44b0-aed3-868b7e33b6ce,view my shopping bag
 com.zombodroid.MemeGenerator,48a75af5-2fe8-4b95-8a36-b4e1872857c4,select list layout for all memes
+com.realbyteapps.moneymanagerfree,,"Navigate to the ""Expenses"" section, use cash as account for both actions, add a $50 food shopping expense under the category ""food"", then move to the ""Income"" section and add $5000 as your monthly salary with the category ""Salary."""
+org.wikipedia,,"Search for ""Wikipedia:Very short featured articles"" and select the first result, change the theme as following : font size to 120%, with serif font style, turn on the reading focus mode."
+com.devhd.feedly,,Go to the explore and open the first two news and set it with read later. Change the view to text-only and the density to comfortable.
+com.bambuna.podcastaddict,,"Search for ""self-improvement"" episodes, subscribe to the first two episodes, download the third episode."
+com.google.android.calendar,,"Create a new event called ""Family Day"" from the app default day , set it as All day event and set it as every week event, change the event colour to tomato  and add description ""family day time"" . Then save the event."
+com.spotify.music,,"go to library page and create a playlist called ""taylor"". Then search ""taylor swift"" in the search bar to add the top three popular songs into the playlist."
+com.goodreads,,"Search for ""Clean code: A handbook of agile software craftsmanship"" , rate it with 5 stars and add it to my books as "" read"" with a new tag named ""software""."
+com.todoist,,"Create a new project called ""Home Renovation,"" set the project color to red , save it as favorite and use the board view. Then create a new task with title ""Call contractors""."
+com.evernote,,"First Create a new notebook named ""Software"" .Then add a reminder with name ""testing"" on ""12:35 AM 28th September 2023""."
+com.google.android.keep,,"Create a new note titled ""Books to Read,"" add three book names with name  ""software"", ""engineering"" and ""fit4702"" with checkboxes, and pin it to the top of your Google Keep notes."
+cn.wps.moffice_eng,,Create a new empty Spreadsheet and click share
+com.tripadvisor.tripadvisor,,"go to the search page and see all the attraction nearby  and like the first result,save it to a trip named ""testing"""
+com.pinterest,,"create a new board called ""car"" and Select only one image. Then  go to the saved page to add ""car pin"" as the board descriptions."
+au.com.carsales,,"Search for used BMW  under $15,000, sort the result by price (high to low) and like the first result."
+com.pineconesoft.petrolspy,,Search the unlead91 price in melbourne and sort it by both kilometers and price.

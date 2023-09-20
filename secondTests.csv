@@ -1,0 +1,11 @@
+Package,Use Case ID,Task
+com.devhd.feedly,,Go to the explore and open the first two news and set it with read later. Change the view to text-only and the density to comfortable.
+com.bambuna.podcastaddict,,"Search for ""self-improvement"" episodes, subscribe to the first two episodes, download the third episode."
+com.google.android.calendar,,"Create a new event called ""Family Day"" from the app default day , set it as All day event and set it as every week event, change the event colour to tomato  and add description ""family day time"" . Then save the event."
+com.goodreads,,"Search for ""Clean code: A handbook of agile software craftsmanship"" , rate it with 5 stars and add it to my books as "" read"" with a new tag named ""software""."
+com.evernote,,"First Create a new notebook named ""Software"" .Then add a reminder with name ""testing"" on ""12:35 AM 28th September 2023""."
+com.google.android.keep,,"Create a new note titled ""Books to Read,"" add three book names with name  ""software"", ""engineering"" and ""fit4702"" with checkboxes, and pin it to the top of your Google Keep notes."
+com.tripadvisor.tripadvisor,,"go to the search page and see all the attraction nearby  and like the first result,save it to a trip named ""testing"""
+com.pinterest,,"create a new board called ""car"" and Select only one image. Then  go to the saved page to add ""car pin"" as the board descriptions."
+au.com.carsales,,"Search for used BMW  under $15,000, sort the result by price (high to low) and like the first result."
+com.pineconesoft.petrolspy,,Search the unlead91 price in melbourne and sort it by both kilometers and price.
