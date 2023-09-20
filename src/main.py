@@ -17,6 +17,7 @@ from hierarchy import download_view_hierarchy, get_view_hierarchy
 EMULATOR_PATH = os.path.expandvars(r"%localappdata%\Android\Sdk\emulator")
 
 OUTPUT_FOLDER = "output_gpt4_1"
+ACTION_LIMIT = 20
 
 
 PERSONAS = [
@@ -45,7 +46,7 @@ def perform_task(task, folder, persona):
     history = []
     actions_file = os.path.join(folder, "actions.json")
 
-    while index < 10:
+    while index < ACTION_LIMIT:
         time.sleep(3)
         capture_screenshot(folder, index)
         hierarchy_filename = os.path.join(folder, f"{index}.xml")
