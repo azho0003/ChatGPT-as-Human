@@ -11,7 +11,7 @@ import csv
 from annotate import annotate_screenshot
 from model import ask_gpt
 from action import get_action, perform_action
-from emulator import start_emulator, capture_screenshot, stop_app, launch_app
+from emulator import init_emulator, capture_screenshot, stop_app, launch_app
 from hierarchy import download_view_hierarchy, get_view_hierarchy
 
 EMULATOR_PATH = os.path.expandvars(r"%localappdata%\Android\Sdk\emulator")
@@ -144,7 +144,7 @@ def test_all_apps(persona):
 
 if __name__ == "__main__":
     setup()
-    start_emulator(EMULATOR_PATH)
+    init_emulator(EMULATOR_PATH)
 
     for persona in PERSONAS:
         print("Using persona", persona)

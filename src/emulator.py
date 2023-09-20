@@ -1,6 +1,14 @@
 import subprocess
+import platform
 import time
 import os
+
+EXTERNAL_EMULATOR = False
+
+
+def is_emulator_running():
+    devices = subprocess.run("adb devices", shell=True, capture_output=True, text=True)
+    return "emulator-5554" in devices.stdout
 
 
 def wait_for_device_to_boot():
@@ -16,12 +24,28 @@ def wait_for_device_to_boot():
 def start_emulator(emulator_path):
     emulators = subprocess.run("emulator -list-avds", shell=True, capture_output=True, text=True, cwd=emulator_path)
     emulator = emulators.stdout.split("\n")[0]
+
+    prefix = ""
+    postfix = ""
+    if EXTERNAL_EMULATOR:
+        if platform.system == "Windows":
+            prefix = "start"
+        else:
+            prefix = "nohup"
+            postfix = "&"
+
     subprocess.Popen(
-        f"emulator -avd {emulator} -netdelay none -netspeed full",
+        f"{prefix} emulator -avd {emulator} -netdelay none -netspeed full {postfix}",
         shell=True,
         cwd=emulator_path,
         text=True,
     )
+
+
+def init_emulator(emulator_path):
+    if not is_emulator_running():
+        start_emulator(emulator_path)
+
     wait_for_device_to_boot()
 
 
