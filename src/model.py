@@ -106,11 +106,18 @@ def get_best_action(responses, task, persona):
     actions = [choice["message"]["content"] for choice in responses["choices"]]
     formatted_actions = "\n".join(actions)
 
-    # Add context of the task and persona
-    prompt = f"{formatted_actions}\n\nTask: {task}\nPersona: {persona['name']}\n\nExplain your choice:"
+    # Add context of the task, persona name, and age
+    prompt = f"{formatted_actions}\n\nTask: {task}\nPersona: {persona['name']} ({persona['age']} years old)\n\nExplain your choice:"
+
+    messages = [
+        {"role": "system", "content": f"{persona['name']} is trying to achieve the task: {task}, and is {persona['age']} years old."},
+        {"role": "user", "content": prompt},
+    ]
+
+    model = get_model(messages)
 
     try:
-        response = get_chat_completion(model="gpt-3.5-turbo", prompt=prompt, max_tokens=100, n=1, stop=["\n"])
+        response = get_chat_completion(model= model, prompt=messages, max_tokens=100, n=1, stop=["\n"])
 
         chosen_action = response.choices[0].message.content.strip()
 
