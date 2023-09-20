@@ -28,7 +28,7 @@ def start_emulator(emulator_path):
     prefix = ""
     postfix = ""
     if EXTERNAL_EMULATOR:
-        if platform.system == "Windows":
+        if platform.system() == "Windows":
             prefix = "start"
         else:
             prefix = "nohup"
