@@ -9,6 +9,7 @@ def perform_action(action, bounds_map):
         case "tap":
             click_element_by_id(action["id"], bounds_map)
         case "type":
+            click_element_by_id(action["id"], bounds_map)
             input_text(action["text"])
         case "scroll":
             scroll(action["scroll-reference"], action["direction"], bounds_map)

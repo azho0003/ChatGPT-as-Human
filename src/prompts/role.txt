@@ -4,7 +4,7 @@ You will respond with the best action that works towards the goal. This may take
 
 The action must be a JSON object. The valid actions are listed below, with the explanation of any property placed in angle brackets.
 {{"action": "tap", "id": <The id of the element to tap>, "reason": <An explanation of how this action works towards the goal>}}
-{{"action": "type", "text": <The text to type into the focused element>, "reason": <An explanation of how this action works towards the goal>}}
+{{"action": "type", "id": <The id of the element to type into>, "text": <The text to type>, "reason": <An explanation of how this action works towards the goal>}}
 {{"action": "scroll", "scroll-reference": <The scroll reference of the element to scroll>, "direction": <The direction to scroll, can be up/down/left/right>, "reason": <An explanation of how this action works towards the goal>}}
 {{"action": "back", "reason": <An explanation of how this action works towards the goal>}}
 {{"action": "enter", "reason": <An explanation of how this action works towards the goal>}}
