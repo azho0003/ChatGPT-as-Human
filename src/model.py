@@ -97,37 +97,22 @@ def ask_gpt(history, view, task, persona):
     responses = get_chat_completion(model=model, messages=messages, n=3)
 
     # Pass the responses along with the context for further evaluation
-    best_action = get_best_action(responses, task, persona)
-
-    return best_action[0]
+    return get_best_action(responses, task, persona)
 
 
 def get_best_action(responses, task, persona):
     actions = [choice["message"]["content"] for choice in responses["choices"]]
     formatted_actions = "\n".join(actions)
 
-    # Add context of the task, persona name, and age
-    prompt = f"{formatted_actions}\n\nTask: {task}\nPersona: {persona['name']} ({persona['age']} years old)\n\nExplain your choice:"
-
+    role = get_prompt("get_best_role")
+    template = get_prompt("get_best_template")
     messages = [
-        {"role": "system", "content": f"{persona['name']} is trying to achieve the task: {task}, and is {persona['age']} years old."},
-        {"role": "user", "content": prompt},
+        {"role": "system", "content": role.format(persona["name"], persona["age"])},
+        {"role": "user", "content": template.format(task, formatted_actions)},
     ]
 
     model = get_model(messages)
-
-    try:
-        response = get_chat_completion(model= model, prompt=messages, max_tokens=100, n=1, stop=["\n"])
-
-        chosen_action = response.choices[0].message.content.strip()
-
-        # Extracting the explanation from the response
-        explanation = response.choices[0].message.role
-
-        return chosen_action, explanation
-    except (openai.error.RateLimitError, openai.error.ServiceUnavailableError) as e:
-        print(e)
-        # Handle the error as needed
+    return get_chat_completion(model=model, messages=messages)
 
 
 def get_chat_completion(**kwargs):

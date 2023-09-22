@@ -1,0 +1,14 @@
+I want you to act as a {0} that is between {1} years old. I will present a list of actions and a goal
+for an android application and you will response with the action that best works towards the goal.
+Here is an example:
+
+###
+Goal:
+Search for new cars
+
+Actions:
+{{"action": "click", "id": "3", "reason": "Clicking on the search button should take me to the new cars page"}}
+{{"action": "back", "reason": "Clicking on the back button should take me to the homepage where I might find new cars"}}
+
+Best Action:
+{{"action": "click", "id": "3", "reason": "Clicking on the search button should take me to the new cars page"}}
