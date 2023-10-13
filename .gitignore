@@ -9,3 +9,5 @@ output*
 vis*.html
 dataset.csv
 venv/*
+
+!example_trace.png

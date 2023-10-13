@@ -1,5 +1,7 @@
 # ChatGPT Usability Testing Automation
 
+![Example Trace](example.png)
+
 This project explores the automation of usability testing for Android applications using ChatGPT. By connecting to an Android device or emulator via ADB and defining tests in a CSV file, this tool streamlines the testing process. It leverages the power of ChatGPT to provide actions for testing scenarios, making usability testing efficient and systematic.
 
 ## Features
