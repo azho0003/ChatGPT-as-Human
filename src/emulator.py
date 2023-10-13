@@ -3,6 +3,7 @@ import platform
 import time
 import os
 
+# Control if the emulator should keep running after the testing ends
 EXTERNAL_EMULATOR = False
 
 

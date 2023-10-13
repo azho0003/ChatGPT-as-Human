@@ -5,7 +5,9 @@ import time
 
 from prompt import get_prompt
 
+# Select between GPT-3.5 or GPT-4
 USE_GPT_4 = True
+
 GPT_35_MAX_TOKENS = 4097
 GPT_4_MAX_TOKENS = 8192
 OUTPUT_TOKENS = 300

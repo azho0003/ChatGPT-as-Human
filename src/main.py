@@ -16,7 +16,7 @@ from hierarchy import download_view_hierarchy, get_view_hierarchy
 
 EMULATOR_PATH = os.path.expandvars(r"%localappdata%\Android\Sdk\emulator")
 
-OUTPUT_FOLDER = "output_gpt4_combine_tap_type"
+OUTPUT_FOLDER = "output"
 ACTION_LIMIT = 20
 
 
