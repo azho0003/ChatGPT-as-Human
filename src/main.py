@@ -19,7 +19,9 @@ EMULATOR_PATH = os.path.expandvars(r"%localappdata%\Android\Sdk\emulator")
 OUTPUT_FOLDER = "output"
 ACTION_LIMIT = 20
 
-
+# The personas that will be tested
+# The name and age will be injected into the
+# role prompt (src/prompts/role.txt)
 PERSONAS = [
     {"name": "teen", "age": "13-19"},
     {"name": "young adult", "age": "20-35"},
